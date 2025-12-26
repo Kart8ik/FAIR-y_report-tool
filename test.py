@@ -27,12 +27,6 @@ current_page_index = 0
 current_page = None  # set after a PDF is opened via open_pdf()
 TEMPLATE_XLSX = resource_path("FORMAT.xlsx")
 
-
-# ================= PDF =================
-doc = fitz.open(PDF_IN)
-num_pages = len(doc)
-current_page_index = 0
-
 # ================= STATE =================
 zoom = 1.5
 bubble_no = 1
@@ -209,6 +203,9 @@ def zoom_canvas(event):
     zoom *= factor
 
     update_preview(bubble_radius_slider.get())
+
+    zoom = min(max(zoom, 0.5), 5.0)
+
 
     if zoom_job:
         root.after_cancel(zoom_job)
@@ -427,8 +424,8 @@ toolbar = tk.Frame(root)
 toolbar.pack(fill="x")
 
 tk.Button(toolbar, text="Open PDF", command=open_pdf).pack(side="left")
-tk.Button(toolbar, text="Prev", command=prev_page).pack(side="left")
-tk.Button(toolbar, text="Next", command=next_page).pack(side="left")
+tk.Button(toolbar, text="Prev Page", command=prev_page).pack(side="left")
+tk.Button(toolbar, text="Next Page", command=next_page).pack(side="left")
 tk.Button(toolbar, text="Undo", command=undo).pack(side="left")
 tk.Button(toolbar, text="Save PDF", command=save_pdf).pack(side="left")
 tk.Button(toolbar, text="Save Report", command=save_report).pack(side="left")
