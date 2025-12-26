@@ -37,8 +37,6 @@ current_page_index = 0
 zoom = 1.5
 bubble_no = 1
 bubbles = []
-rendered_img = None
-rendered_zoom = None
 
 pan_start = None
 offset_x, offset_y = 0, 0
@@ -46,48 +44,29 @@ offset_x, offset_y = 0, 0
 # =====================================================
 # RENDER PDF
 # =====================================================
-def render_pdf():
-    global rendered_img, rendered_zoom
+def render():
+    if not doc:
+        return
 
     page = doc[current_page_index]
-    mat = fitz.Matrix(zoom * 0.85, zoom * 0.85)  # slight downscale = faster
+    mat = fitz.Matrix(zoom, zoom)
     pix = page.get_pixmap(matrix=mat)
-
     img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-    rendered_img = ImageTk.PhotoImage(img)
-    rendered_zoom = zoom
 
-    canvas.delete("pdf")
-    canvas.create_image(offset_x, offset_y, anchor="nw",
-                        image=rendered_img, tags="pdf")
+    tk_img = ImageTk.PhotoImage(img)
+    canvas.image = tk_img
+    canvas.delete("all")
+    canvas.create_image(offset_x, offset_y, anchor="nw", image=tk_img)
 
-def render_overlays():
-    canvas.delete("overlay")
     for b in bubbles:
         if b["page"] == current_page_index:
             x = b["x"] * zoom + offset_x
             y = b["y"] * zoom + offset_y
             r = b["r"] * zoom
-            canvas.create_oval(
-                x-r, y-r, x+r, y+r,
-                outline="red", width=2, tags="overlay"
-            )
-            canvas.create_text(
-                x, y, text=str(b["no"]),
-                fill="red", tags="overlay"
-            )
+            canvas.create_oval(x-r, y-r, x+r, y+r, outline="red", width=2)
+            canvas.create_text(x, y, text=str(b["no"]), fill="red")
 
-def render(force=False):
-    if not doc:
-        return
-
-    if force or rendered_zoom != zoom:
-        render_pdf()
-
-    render_overlays()
     update_bubble_list()
-
-
 
 def open_pdf():
     global PDF_IN, doc, num_pages, current_page_index, bubbles, bubble_no
@@ -196,25 +175,15 @@ def add_bubble(event):
 # =====================================================
 # ZOOM / PAN
 # =====================================================
-zoom_job = None
-
 def zoom_canvas(event):
-    global zoom, offset_x, offset_y, zoom_job
-
+    global zoom, offset_x, offset_y
     factor = 1.25 if event.delta > 0 else 1 / 1.25
     mx, my = event.x, event.y
-
     offset_x = mx - factor * (mx - offset_x)
     offset_y = my - factor * (my - offset_y)
     zoom *= factor
-
     update_preview(bubble_radius_slider.get())
-
-    if zoom_job:
-        root.after_cancel(zoom_job)
-
-    zoom_job = root.after(120, lambda: render(force=True))
-
+    render()
 
 def start_pan(event):
     global pan_start
@@ -223,15 +192,10 @@ def start_pan(event):
 def do_pan(event):
     global offset_x, offset_y, pan_start
     if pan_start:
-        dx = event.x - pan_start[0]
-        dy = event.y - pan_start[1]
-        offset_x += dx
-        offset_y += dy
+        offset_x += event.x - pan_start[0]
+        offset_y += event.y - pan_start[1]
         pan_start = (event.x, event.y)
-
-        canvas.move("pdf", dx, dy)
-        canvas.move("overlay", dx, dy)
-
+        render()
 
 def end_pan(event):
     global pan_start
