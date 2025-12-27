@@ -64,10 +64,11 @@ def render_overlays():
             r = b["r"] * zoom
             canvas.create_oval(
                 x-r, y-r, x+r, y+r,
-                outline="red", width=2, tags="overlay"
+                outline="red", width=r/10, tags="overlay"
             )
             canvas.create_text(
                 x, y, text=str(b["no"]),
+                font=("Arial", int(r)),
                 fill="red", tags="overlay"
             )
 
@@ -308,11 +309,12 @@ def save_pdf():
         for b in bubbles:
             if b["page"] == i:
                 x, y, r = b["x"], b["y"], b["r"]
-                p.draw_oval(fitz.Rect(x-r, y-r, x+r, y+r), color=(1,0,0), width=1.2)
-                p.insert_text(fitz.Point(x-4, y+4), str(b["no"]), fontsize=8, color=(1,0,0))
+                p.draw_oval(fitz.Rect(x-r, y-r, x+r, y+r), color=(1,0,0), width=r/10)
+                p.insert_text(fitz.Point(x-(r/3), y+(r/3)), str(b["no"]), fontsize=r, color=(1,0,0))
     out.save(PDF_OUT)
     out.close()
     messagebox.showinfo("Saved", f"Bubbled drawing saved as {PDF_OUT}")
+
 
 # =====================================================
 # SAVE REPORT (UNCHANGED)
