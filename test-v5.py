@@ -17,14 +17,6 @@ def resource_path(relative_path):
 
     return os.path.join(base_path, relative_path)
 
-# ================ to apply icon ===================
-def apply_icon(window):
-    try:
-        window.iconbitmap(resource_path("app-icon.ico"))
-    except:
-        pass
-
-
 
 # ================= FILES =================
 PDF_IN = None
@@ -65,40 +57,20 @@ def render_pdf():
 
 def render_overlays():
     canvas.delete("overlay")
-
     for b in bubbles:
-        if b["page"] != current_page_index:
-            continue
-
-        x = b["x"] * zoom + offset_x
-        y = b["y"] * zoom + offset_y
-        r = b["r"] * zoom
-
-        if b.get("highlight"):
-            outline = "red"
-            fill = "yellow"
-            width = max(3, r / 6)
-        else:
-            outline = "red"
-            fill = ""
-            width = max(2, r / 10)
-
-        canvas.create_oval(
-            x - r, y - r, x + r, y + r,
-            outline=outline,
-            fill=fill,
-            width=width,
-            tags="overlay"
-        )
-
-        canvas.create_text(
-            x, y,
-            text=str(b["no"]),
-            font=("Arial", int(r)),
-            fill=outline,
-            tags="overlay"
-        )
-
+        if b["page"] == current_page_index:
+            x = b["x"] * zoom + offset_x
+            y = b["y"] * zoom + offset_y
+            r = b["r"] * zoom
+            canvas.create_oval(
+                x-r, y-r, x+r, y+r,
+                outline="red", width=r/10, tags="overlay"
+            )
+            canvas.create_text(
+                x, y, text=str(b["no"]),
+                font=("Arial", int(r)),
+                fill="red", tags="overlay"
+            )
 
 def render(force=False):
     if not doc:
@@ -109,7 +81,6 @@ def render(force=False):
 
     render_overlays()
     update_bubble_list()
-
 
 
 
@@ -141,18 +112,12 @@ def open_pdf():
 # =====================================================
 # POPUP (Requirement / Tolerance)
 # =====================================================
-def requirement_popup(existing=None):
+def requirement_popup():
     popup = tk.Toplevel(root)
-    popup.title("Edit FAIR Dimension" if existing else "FAIR Dimension Entry")
-    apply_icon(popup)
-    popup.transient(root)
+    popup.title("FAIR Dimension Entry")
     popup.grab_set()
 
-    # Let the grid stretch so buttons can anchor to opposite sides
-    popup.columnconfigure(0, weight=1)
-    popup.columnconfigure(1, weight=1)
-
-    result = {"action": None}
+    result = {"ok": False}
 
     tk.Label(popup, text="Characteristic").grid(row=0, column=0, padx=8, pady=5, sticky="e")
     tk.Label(popup, text="Requirement").grid(row=1, column=0, padx=8, pady=5, sticky="e")
@@ -164,48 +129,28 @@ def requirement_popup(existing=None):
     neg  = tk.Entry(popup, width=10)
     pos  = tk.Entry(popup, width=10)
 
-    if existing:
-        char.insert(0, existing["char"])
-        req.insert(0, existing["req"])
-        neg.insert(0, existing["neg"])
-        pos.insert(0, existing["pos"])
-
     char.grid(row=0, column=1)
     req.grid(row=1, column=1)
     neg.grid(row=2, column=1, sticky="w")
     pos.grid(row=3, column=1, sticky="w")
 
-    def save():
+    def submit():
         if not req.get().strip():
             messagebox.showwarning("Missing", "Requirement is mandatory")
             return
-        result.update({
-            "action": "save",
-            "char": char.get().strip(),
-            "req": req.get().strip(),
-            "neg": neg.get().strip(),
-            "pos": pos.get().strip(),
-        })
+        result["ok"] = True
+        result["char"] = char.get().strip()
+        result["req"]  = req.get().strip()
+        result["neg"]  = neg.get().strip()
+        result["pos"]  = pos.get().strip()
         popup.destroy()
 
-    def delete():
-        if messagebox.askyesno("Delete", "Delete this bubble?"):
-            result["action"] = "delete"
-            popup.destroy()
-
-    tk.Button(popup, text="Save", width=10, command=save).grid(
-        row=4, column=0, padx=(20, 0), pady=8, sticky="w"
+    tk.Button(popup, text="OK", width=10, command=submit).grid(
+        row=4, column=0, columnspan=2, pady=10
     )
-
-    if existing:
-        tk.Button(popup, text="Delete", width=10, fg="red", command=delete).grid(
-            row=4, column=1, padx=(0, 20), pady=8, sticky="e"
-        )
 
     popup.wait_window()
     return result
-
-
 
 # =====================================================
 # ADD BUBBLE (IMMEDIATE)
@@ -225,86 +170,23 @@ def add_bubble(event):
         "char": "",
         "req": "",
         "neg": "",
-        "pos": "",
-        "highlight": False
+        "pos": ""
     })
-
 
     render()
 
     data = requirement_popup()
 
-    # requirement_popup returns {"action": "save"|"delete"|None, ...}
-    if data.get("action") == "save":
+    if data.get("ok"):
         bubbles[-1]["char"] = data["char"]
         bubbles[-1]["req"]  = data["req"]
         bubbles[-1]["neg"]  = data["neg"]
         bubbles[-1]["pos"]  = data["pos"]
         bubble_no += 1
     else:
-        # If the dialog was closed or cancelled, discard the pending bubble
         bubbles.pop()
 
     render()
-
-
-
-def highlight_bubble(bubble, duration=5000):
-    bubble["highlight"] = True
-    render_overlays()
-
-    def clear():
-        bubble["highlight"] = False
-        render_overlays()
-
-    root.after(duration, clear)
-
-
-# =====================================================
-# EDIT BUBBLE (from list)
-# =====================================================
-
-def on_bubble_edit(event):
-    lb = event.widget
-    idx = lb.nearest(event.y)
-
-    if idx >= 0:
-        lb.selection_clear(0, tk.END)
-        lb.selection_set(idx)
-        lb.activate(idx)
-
-    if idx < 2:
-        return  # header rows
-
-    page_bubbles = [b for b in bubbles if b["page"] == current_page_index]
-    bubble_idx = idx - 2
-
-    if bubble_idx >= len(page_bubbles):
-        return
-
-    bubble = page_bubbles[bubble_idx]
-
-    highlight_bubble(bubble)
-
-    result = requirement_popup(existing=bubble)
-
-    if result["action"] == "save":
-        bubble["char"] = result["char"]
-        bubble["req"]  = result["req"]
-        bubble["neg"]  = result["neg"]
-        bubble["pos"]  = result["pos"]
-
-    elif result["action"] == "delete":
-        bubbles.remove(bubble)
-        for i, b in enumerate(bubbles, start=1):
-            b["no"] = i
-        global bubble_no
-        bubble_no = len(bubbles) + 1
-
-    update_bubble_list()
-    render(force=True)
-
-
 
 # =====================================================
 # ZOOM / PAN
@@ -539,8 +421,6 @@ def save_report():
 # =====================================================
 root = tk.Tk()
 root.title("FAIR-y")
-root.iconbitmap(resource_path("app-icon.ico"))
-
 
 toolbar = tk.Frame(root)
 toolbar.pack(fill="x")
@@ -567,17 +447,8 @@ def update_preview(val):
 bubble_radius_slider.config(command=update_preview)
 update_preview(bubble_radius_slider.get())
 
-bubble_listbox = tk.Listbox(
-    root,
-    height=7,
-    font=("Consolas", 10),
-    selectmode="browse",
-    exportselection=False
-)
-
+bubble_listbox = tk.Listbox(root, height=7, font=("Consolas", 10))
 bubble_listbox.pack(fill="x", padx=5, pady=3)
-bubble_listbox.bind("<Double-Button-1>", on_bubble_edit)
-
 
 canvas = tk.Canvas(root, bg="gray")
 canvas.pack(fill="both", expand=True)
