@@ -44,7 +44,7 @@ def render_pdf():
     global rendered_img, rendered_zoom
 
     page = doc[current_page_index]
-    mat = fitz.Matrix(zoom * 0.85, zoom * 0.85)  # slight downscale = faster
+    mat = fitz.Matrix(zoom, zoom) 
     pix = page.get_pixmap(matrix=mat)
 
     img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
@@ -196,16 +196,17 @@ def zoom_canvas(event):
     global zoom, offset_x, offset_y, zoom_job
 
     factor = 1.25 if event.delta > 0 else 1 / 1.25
-    mx, my = event.x, event.y
+    new_zoom = zoom * factor
 
+    if new_zoom > 10.0 or new_zoom < 0.5 :
+        return
+
+    mx, my = event.x, event.y
     offset_x = mx - factor * (mx - offset_x)
     offset_y = my - factor * (my - offset_y)
-    zoom *= factor
+    zoom = new_zoom
 
     update_preview(bubble_radius_slider.get())
-
-    zoom = min(max(zoom, 0.5), 5.0)
-
 
     if zoom_job:
         root.after_cancel(zoom_job)
@@ -345,7 +346,6 @@ def save_report():
     LAST_TEMPLATE_ROW = START_ROW + TEMPLATE_ROWS - 1  # 22
     INSERT_AT = LAST_TEMPLATE_ROW + 1                  # 23 (just before merged legends)
     template_row_idx = LAST_TEMPLATE_ROW
-    template_row_height = ws.row_dimensions[template_row_idx].height
     footer_rows = {24: ws.row_dimensions[24].height,
                    25: ws.row_dimensions[25].height,
                    26: ws.row_dimensions[26].height}
@@ -430,7 +430,7 @@ tk.Button(toolbar, text="Undo", command=undo).pack(side="left")
 tk.Button(toolbar, text="Save PDF", command=save_pdf).pack(side="left")
 tk.Button(toolbar, text="Save Report", command=save_report).pack(side="left")
 
-bubble_radius_slider = tk.Scale(toolbar, from_=6, to=25, orient="horizontal", label="Bubble Size")
+bubble_radius_slider = tk.Scale(toolbar, from_=3, to=25, orient="horizontal", label="Bubble Size")
 bubble_radius_slider.set(12)
 bubble_radius_slider.pack(side="right")
 
