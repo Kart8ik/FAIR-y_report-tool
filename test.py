@@ -24,6 +24,16 @@ def apply_icon(window):
     except:
         pass
 
+# ================ handle data types ===================
+def to_number(value):
+    value = value.strip()
+    if value == "":
+        return None
+    try:
+        return int(value) if value.isdigit() else float(value)
+    except ValueError:
+        return None
+
 
 
 # ================= FILES =================
@@ -270,21 +280,25 @@ def requirement_popup(existing=None):
         equip.insert(0, existing["equip"])
 
     char.grid(row=0, column=1, padx=(0, 16))
-    req.grid(row=1, column=1)
+    req.grid(row=1, column=1, sticky="w")
     neg.grid(row=2, column=1, sticky="w")
     pos.grid(row=3, column=1, sticky="w")
     equip.grid(row=4, column=1, sticky="w")
 
     def save():
+        req_val = to_number(req.get())
+        neg_val = to_number(neg.get())
+        pos_val = to_number(pos.get())
+
         if not req.get().strip():
             messagebox.showwarning("Missing", "Requirement is mandatory")
             return
         result.update({
             "action": "save",
             "char": char.get().strip(),
-            "req": req.get().strip(),
-            "neg": neg.get().strip(),
-            "pos": pos.get().strip(),
+            "req": req_val,
+            "neg": neg_val,
+            "pos": pos_val,
             "equip": equip.get().strip()
         })
         popup.destroy()
