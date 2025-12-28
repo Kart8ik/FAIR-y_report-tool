@@ -32,7 +32,7 @@ def to_number(value):
     try:
         return int(value) if value.isdigit() else float(value)
     except ValueError:
-        return value
+        return None
 
 
 
@@ -155,9 +155,7 @@ def open_pdf():
     offset_x = offset_y = 0
     page_cache.clear()
 
-    render(force=True)
-
-
+    render()
 
 # =====================================================
 # POPUP (Requirement / Tolerance)
@@ -242,10 +240,11 @@ def requirement_popup(existing=None):
         ],
         width=28
     )
+    vcmd = popup.register(lambda P: P == "" or P.replace(".", "", 1).isdigit())
 
-    req = tk.Entry(popup, validate="key")
-    neg = tk.Entry(popup, validate="key")
-    pos = tk.Entry(popup, validate="key")
+    req = tk.Entry(popup, validate="key", validatecommand=(vcmd, "%P"))
+    neg = tk.Entry(popup, validate="key", validatecommand=(vcmd, "%P"))
+    pos = tk.Entry(popup, validate="key", validatecommand=(vcmd, "%P"))
 
     equip = ttk.Combobox(
         popup,
@@ -298,14 +297,10 @@ def requirement_popup(existing=None):
     pos.grid(row=3, column=1, sticky="w")
     equip.grid(row=4, column=1, sticky="w")
 
-    # moves the cursor to the input for ease of use
-    char.focus_set()
-    popup.after(50, lambda: char.select_range(0, tk.END))
-
     def save():
-        req_val = to_number(req.get().strip())
-        neg_val = to_number(neg.get().strip())
-        pos_val = to_number(pos.get().strip())
+        req_val = to_number(req.get())
+        neg_val = to_number(neg.get())
+        pos_val = to_number(pos.get())
 
         if not req.get().strip():
             messagebox.showwarning("Missing", "Requirement is mandatory")
@@ -337,15 +332,6 @@ def requirement_popup(existing=None):
         tk.Button(popup, text="Delete", width=10, fg="red", command=delete).grid(
             row=5, column=1, padx=(0, 20), pady=8, sticky="e"
         )
-
-    # key binds for ease of use
-    char.bind("<Return>", lambda e: req.focus_set())
-    req.bind("<Return>", lambda e: neg.focus_set())
-    neg.bind("<Return>", lambda e: pos.focus_set())
-    pos.bind("<Return>", lambda e: equip.focus_set())
-    equip.bind("<Return>", lambda e: save())
-
-    popup.bind("<Escape>", lambda e: popup.destroy())
 
     popup.wait_window()
     return result
@@ -399,37 +385,15 @@ def add_bubble(event):
     render()
 
 
-# =====================================================
-# DELETE BUBBLE 
-# =====================================================
-def delete_bubble(bubble):
-    bubbles.remove(bubble)
 
-    # renumber globally
-    for i, b in enumerate(bubbles, start=1):
-        b["no"] = i
+def highlight_bubble(event, duration=2000):
+    lb = event.widget
+    idx = lb.nearest(event.y)
 
-    global bubble_no
-    bubble_no = len(bubbles) + 1
-
-    update_bubble_list()
-    render(force=True)
-
-
-
-def highlight_bubble(event=None, duration=2000):
-    # Supports both mouse selection and keyboard selection
-    lb = event.widget if event and hasattr(event, "widget") else bubble_listbox
-
-    if event and hasattr(event, "y"):
-        idx = lb.nearest(event.y)
-        if idx >= 0:
-            lb.selection_clear(0, tk.END)
-            lb.selection_set(idx)
-            lb.activate(idx)
-    else:
-        sel = lb.curselection()
-        idx = sel[0] if sel else -1
+    if idx >= 0:
+        lb.selection_clear(0, tk.END)
+        lb.selection_set(idx)
+        lb.activate(idx)
 
     if idx < 2:
         return  # header rows
@@ -488,34 +452,15 @@ def on_bubble_edit(event):
         bubble["equip"]  = result["equip"]
 
     elif result["action"] == "delete":
-        delete_bubble(bubble)
-        return
+        bubbles.remove(bubble)
+        for i, b in enumerate(bubbles, start=1):
+            b["no"] = i
+        global bubble_no
+        bubble_no = len(bubbles) + 1
 
     update_bubble_list()
     render(force=True)
 
-
-def on_bubble_delete_key(event):
-    lb = event.widget
-    sel = lb.curselection()
-
-    if not sel:
-        return
-
-    idx = sel[0]
-    if idx < 2:
-        return
-
-    page_bubbles = [b for b in bubbles if b["page"] == current_page_index]
-    bubble_idx = idx - 2
-
-    if bubble_idx >= len(page_bubbles):
-        return
-
-    bubble = page_bubbles[bubble_idx]
-
-    if messagebox.askyesno("Delete", "Delete this bubble?"):
-        delete_bubble(bubble)
 
 
 # =====================================================
@@ -523,20 +468,16 @@ def on_bubble_delete_key(event):
 # =====================================================
 zoom_job = None
 
-def apply_zoom(factor, center=None):
-    """Shared zoom logic for mouse wheel and keybinds."""
+def zoom_canvas(event):
     global zoom, offset_x, offset_y, zoom_job, page_cache
 
+    factor = 1.25 if event.delta > 0 else 1 / 1.25
     new_zoom = zoom * factor
-    if new_zoom > 10.0 or new_zoom < 0.5:
+
+    if new_zoom > 10.0 or new_zoom < 0.5 :
         return
 
-    if center is None:
-        mx = canvas.winfo_width() / 2
-        my = canvas.winfo_height() / 2
-    else:
-        mx, my = center
-
+    mx, my = event.x, event.y
     offset_x = mx - factor * (mx - offset_x)
     offset_y = my - factor * (my - offset_y)
     if new_zoom != zoom:
@@ -549,31 +490,6 @@ def apply_zoom(factor, center=None):
         root.after_cancel(zoom_job)
 
     zoom_job = root.after(120, lambda: render(force=True))
-
-def zoom_canvas(event):
-    factor = 1.25 if event.delta > 0 else 1 / 1.25
-    apply_zoom(factor, center=(event.x, event.y))
-
-def zoom_in_key(event=None):
-    apply_zoom(1.25)
-
-def zoom_out_key(event=None):
-    apply_zoom(1 / 1.25)
-
-# =====================================================
-# Bubble size via keyboard
-# =====================================================
-def _set_bubble_radius(delta):
-    val = bubble_radius_slider.get() + delta
-    val = max(bubble_radius_slider.cget("from"), min(bubble_radius_slider.cget("to"), val))
-    bubble_radius_slider.set(val)
-    update_preview(val)
-
-def radius_increase(event=None):
-    _set_bubble_radius(1)
-
-def radius_decrease(event=None):
-    _set_bubble_radius(-1)
 
 
 def start_pan(event):
@@ -622,47 +538,6 @@ def undo():
             bubble_no -= 1
             break
     render()
-
-
-# =====================================================
-# SHORTCUTS MENU
-# =====================================================
-def show_shortcuts():
-    win = tk.Toplevel(root)
-    win.title("Keyboard Shortcuts")
-    win.transient(root)
-    win.grab_set()
-    apply_icon(win)
-
-    frame = tk.Frame(win, padx=10, pady=10)
-    frame.pack(fill="both", expand=True)
-
-    shortcuts = [
-        ("Ctrl + O", "Open PDF"),
-        ("Ctrl + S", "Save PDF"),
-        ("Ctrl + Shift + S", "Save Report"),
-        ("Escape", "Exit any Popup"),
-        ("Ctrl + Z", "Undo Bubble"),
-        ("Enter", "Edit Selected Bubble"),
-        ("Delete", "Delete Selected Bubble"),
-        ("Shift + ↑ / ↓", "Change Bubble Size"),
-        ("← / →", "Prev / Next Page"),
-        ("↑ / ↓", "Prev / Next List Item"),
-        ("Ctrl + + / -", "Zoom In / Out"),
-        ("Ctrl + /", "Show Shortcuts"),
-    ]
-
-    for i, (key, action) in enumerate(shortcuts):
-        tk.Label(frame, text=key, font=("Consolas", 11, "bold")).grid(row=i, column=0, sticky="w", padx=(0, 20))
-        tk.Label(frame, text=action, font=("Segoe UI", 11)).grid(row=i, column=1, sticky="w")
-
-    win.bind("<Return>", lambda e: win.destroy())
-    win.bind("<Escape>", lambda e: win.destroy())
-
-    win.focus_set()
-
-
-
 
 # =====================================================
 # LIST VIEW
@@ -853,11 +728,6 @@ def save_report():
 # UI
 # =====================================================
 root = tk.Tk()
-# Start maximized to use full screen
-try:
-    root.state("zoomed")  # Windows
-except Exception:
-    root.attributes("-zoomed", True)  # fallback
 root.title("FAIR-y")
 root.iconbitmap(resource_path("app-icon.ico"))
 
@@ -865,36 +735,12 @@ root.iconbitmap(resource_path("app-icon.ico"))
 toolbar = tk.Frame(root)
 toolbar.pack(fill="x", padx=5)
 
-#=======================================================
-# UI Button Binds
-#=======================================================
 tk.Button(toolbar, text="Open PDF", command=open_pdf).pack(side="left")
 tk.Button(toolbar, text="Prev Page", command=prev_page).pack(side="left")
 tk.Button(toolbar, text="Next Page", command=next_page).pack(side="left")
 tk.Button(toolbar, text="Undo Bubble", command=undo).pack(side="left")
 tk.Button(toolbar, text="Save PDF", command=save_pdf).pack(side="left")
 tk.Button(toolbar, text="Save Report", command=save_report).pack(side="left")
-tk.Button(toolbar, text="Shortcuts", command=show_shortcuts).pack(side="left")
-
-#=======================================================
-# Keyboard Button Binds
-#=======================================================
-root.bind("<Control-o>", lambda e: open_pdf())
-root.bind("<Control-s>", lambda e: save_pdf())
-root.bind("<Control-Shift-S>", lambda e: save_report())
-root.bind("<Right>", lambda e: next_page())
-root.bind("<Left>", lambda e: prev_page())
-root.bind("<Control-z>", lambda e: undo())
-root.bind("<Control-/>", lambda e: show_shortcuts())
-root.bind("<Control-plus>", zoom_in_key)
-root.bind("<Control-KP_Add>", zoom_in_key)
-root.bind("<Control-equal>", zoom_in_key)  # Ctrl+= for + on many keyboards
-root.bind("<Control-minus>", zoom_out_key)
-root.bind("<Control-KP_Subtract>", zoom_out_key)
-root.bind("<Shift-Up>", radius_increase)
-root.bind("<Shift-Down>", radius_decrease)
-
-
 
 bubble_radius_slider = tk.Scale(toolbar, from_=3, to=25, orient="horizontal", label="Bubble Size")
 bubble_radius_slider.set(6)
@@ -921,11 +767,7 @@ bubble_listbox = tk.Listbox(
 
 bubble_listbox.pack(fill="x", padx=5, pady=3)
 bubble_listbox.bind("<Double-Button-1>", on_bubble_edit)
-bubble_listbox.bind("<Return>", on_bubble_edit)
 bubble_listbox.bind("<Button-1>", highlight_bubble)
-bubble_listbox.bind("<Delete>", on_bubble_delete_key)
-# Give initial focus so arrow keys work without first click
-root.after(50, bubble_listbox.focus_set)
 
 
 canvas = tk.Canvas(root, bg="gray")
