@@ -51,6 +51,8 @@ bubble_no = 1
 bubbles = []
 rendered_img = None
 rendered_zoom = None
+rendered_page_index = None
+page_cache = {}  # cache rendered pages per (page_index, zoom)
 
 pan_start = None
 offset_x, offset_y = 0, 0
@@ -59,15 +61,21 @@ offset_x, offset_y = 0, 0
 # RENDER PDF
 # =====================================================
 def render_pdf():
-    global rendered_img, rendered_zoom
+    global rendered_img, rendered_zoom, rendered_page_index
 
-    page = doc[current_page_index]
-    mat = fitz.Matrix(zoom, zoom) 
-    pix = page.get_pixmap(matrix=mat)
-
-    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-    rendered_img = ImageTk.PhotoImage(img)
+    cache_key = (current_page_index, zoom)
+    cached = page_cache.get(cache_key)
+    if cached:
+        rendered_img = cached
+    else:
+        page = doc[current_page_index]
+        mat = fitz.Matrix(zoom, zoom)
+        pix = page.get_pixmap(matrix=mat)
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        rendered_img = ImageTk.PhotoImage(img)
+        page_cache[cache_key] = rendered_img
     rendered_zoom = zoom
+    rendered_page_index = current_page_index
 
     canvas.delete("pdf")
     canvas.create_image(offset_x, offset_y, anchor="nw",
@@ -114,7 +122,7 @@ def render(force=False):
     if not doc:
         return
 
-    if force or rendered_zoom != zoom:
+    if force or rendered_zoom != zoom or rendered_page_index != current_page_index:
         render_pdf()
 
     render_overlays()
@@ -125,7 +133,7 @@ def render(force=False):
 
 def open_pdf():
     global PDF_IN, doc, num_pages, current_page_index, bubbles, bubble_no
-    global offset_x, offset_y
+    global offset_x, offset_y, page_cache
 
     path = filedialog.askopenfilename(
         title="Select PDF",
@@ -145,6 +153,7 @@ def open_pdf():
     bubbles.clear()
     bubble_no = 1
     offset_x = offset_y = 0
+    page_cache.clear()
 
     render()
 
@@ -231,9 +240,12 @@ def requirement_popup(existing=None):
         ],
         width=28
     )
-    req  = tk.Entry(popup, width=20)
-    neg  = tk.Entry(popup, width=10)
-    pos  = tk.Entry(popup, width=10)
+    vcmd = popup.register(lambda P: P == "" or P.replace(".", "", 1).isdigit())
+
+    req = tk.Entry(popup, validate="key", validatecommand=(vcmd, "%P"))
+    neg = tk.Entry(popup, validate="key", validatecommand=(vcmd, "%P"))
+    pos = tk.Entry(popup, validate="key", validatecommand=(vcmd, "%P"))
+
     equip = ttk.Combobox(
         popup,
         values = [
@@ -438,7 +450,7 @@ def on_bubble_edit(event):
 zoom_job = None
 
 def zoom_canvas(event):
-    global zoom, offset_x, offset_y, zoom_job
+    global zoom, offset_x, offset_y, zoom_job, page_cache
 
     factor = 1.25 if event.delta > 0 else 1 / 1.25
     new_zoom = zoom * factor
@@ -449,6 +461,8 @@ def zoom_canvas(event):
     mx, my = event.x, event.y
     offset_x = mx - factor * (mx - offset_x)
     offset_y = my - factor * (my - offset_y)
+    if new_zoom != zoom:
+        page_cache.clear()
     zoom = new_zoom
 
     update_preview(bubble_radius_slider.get())
@@ -700,7 +714,7 @@ root.iconbitmap(resource_path("app-icon.ico"))
 
 
 toolbar = tk.Frame(root)
-toolbar.pack(fill="x")
+toolbar.pack(fill="x", padx=5)
 
 tk.Button(toolbar, text="Open PDF", command=open_pdf).pack(side="left")
 tk.Button(toolbar, text="Prev Page", command=prev_page).pack(side="left")
