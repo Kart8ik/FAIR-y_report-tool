@@ -29,7 +29,7 @@ Desktop Tkinter tool for placing numbered “bubbles” on a PDF part-design dra
 ```
 python test.py
 ```
-If packaged with PyInstaller (`--onefile`), ensure `FORMAT.xlsx` is included (`--add-data FORMAT.xlsx;.`) so `resource_path` can find it.
+If packaged with PyInstaller (`--onefile`), ensure `FORMAT.xlsx` is included (`--add-data "FORMAT.xlsx;." ^ --add-data "app-icon.ico;." `) so `resource_path` can find it.
 
 ### Notes
 - Initial globals set `PDF_IN = None`; opening a PDF via the UI is required before rendering/exporting.
