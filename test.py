@@ -428,7 +428,16 @@ def save_pdf():
             if b["page"] == i:
                 x, y, r = b["x"], b["y"], b["r"]
                 p.draw_oval(fitz.Rect(x-r, y-r, x+r, y+r), color=(1,0,0), width=r/10)
-                p.insert_text(fitz.Point(x-(r/3), y+(r/3)), str(b["no"]), fontsize=r, color=(1,0,0))
+                text = str(b["no"])
+                font_size = r
+                try:
+                    text_width = fitz.get_text_length(text, fontsize=font_size)
+                except Exception:
+                    text_width = font_size * 0.6 * len(text)  # fallback estimate
+                # center horizontally; adjust baseline to visually center vertically
+                tx = x - text_width / 2
+                ty = y + font_size * 0.35
+                p.insert_text(fitz.Point(tx, ty), text, fontsize=font_size, color=(1,0,0))
     out.save(PDF_OUT)
     out.close()
     messagebox.showinfo("Saved", f"Bubbled drawing saved as {PDF_OUT}")
