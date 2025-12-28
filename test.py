@@ -340,10 +340,21 @@ def requirement_popup(existing=None):
 
     # key binds for ease of use
     char.bind("<Return>", lambda e: req.focus_set())
+
     req.bind("<Return>", lambda e: neg.focus_set())
+    req.bind("<Up>", lambda e: char.focus_set())
+    req.bind("<Down>", lambda e: neg.focus_set())
+
     neg.bind("<Return>", lambda e: pos.focus_set())
+    neg.bind("<Up>", lambda e: req.focus_set())
+    neg.bind("<Down>", lambda e: pos.focus_set())
+
     pos.bind("<Return>", lambda e: equip.focus_set())
+    pos.bind("<Up>", lambda e: neg.focus_set())
+    pos.bind("<Down>", lambda e: equip.focus_set())
+
     equip.bind("<Return>", lambda e: save())
+    equip.bind("<Up>", lambda e: pos.focus_set())
 
     popup.bind("<Escape>", lambda e: popup.destroy())
 
@@ -417,30 +428,7 @@ def delete_bubble(bubble):
 
 
 
-def highlight_bubble(event=None, duration=2000):
-    # Supports both mouse selection and keyboard selection
-    lb = event.widget if event and hasattr(event, "widget") else bubble_listbox
-
-    if event and hasattr(event, "y"):
-        idx = lb.nearest(event.y)
-        if idx >= 0:
-            lb.selection_clear(0, tk.END)
-            lb.selection_set(idx)
-            lb.activate(idx)
-    else:
-        sel = lb.curselection()
-        idx = sel[0] if sel else -1
-
-    if idx < 2:
-        return  # header rows
-
-    page_bubbles = [b for b in bubbles if b["page"] == current_page_index]
-    bubble_idx = idx - 2
-
-    if bubble_idx >= len(page_bubbles):
-        return
-
-    bubble = page_bubbles[bubble_idx]
+def highlight_bubble(bubble, duration=2000):
 
     bubble["highlight"] = True
     render_overlays()
@@ -452,31 +440,29 @@ def highlight_bubble(event=None, duration=2000):
     root.after(duration, clear)
 
 
-# =====================================================
-# EDIT BUBBLE (from list)
-# =====================================================
-
-def on_bubble_edit(event):
-    lb = event.widget
-    idx = lb.nearest(event.y)
-
-    if idx >= 0:
+def get_selected_listbox_index(event, lb):
+    # Mouse event
+    if event is not None and hasattr(event, "y"):
+        idx = lb.nearest(event.y)
         lb.selection_clear(0, tk.END)
         lb.selection_set(idx)
         lb.activate(idx)
+        return idx
 
-    if idx < 2:
-        return  # header rows
+    # Keyboard event
+    sel = lb.curselection()
+    if sel:
+        return sel[0]
 
-    page_bubbles = [b for b in bubbles if b["page"] == current_page_index]
-    bubble_idx = idx - 2
+    return None
 
-    if bubble_idx >= len(page_bubbles):
-        return
 
-    bubble = page_bubbles[bubble_idx]
+# =====================================================
+# EDIT BUBBLE (from list)
+# =====================================================
+def on_bubble_edit(bubble):
 
-    highlight_bubble(event)
+    highlight_bubble(bubble)
 
     result = requirement_popup(existing=bubble)
 
@@ -493,6 +479,45 @@ def on_bubble_edit(event):
 
     update_bubble_list()
     render(force=True)
+
+def on_bubble_edit_mouse(event):
+    lb = event.widget
+    idx = lb.nearest(event.y)
+
+    if idx < 2:
+        return
+
+    lb.selection_clear(0, tk.END)
+    lb.selection_set(idx)
+    lb.activate(idx)
+
+    page_bubbles = [b for b in bubbles if b["page"] == current_page_index]
+    bubble_idx = idx - 2
+
+    if bubble_idx >= len(page_bubbles):
+        return
+
+    on_bubble_edit(page_bubbles[bubble_idx])
+
+
+def on_bubble_edit_key(event):
+    lb = event.widget
+    sel = lb.curselection()
+
+    if not sel:
+        return
+
+    idx = sel[0]
+    if idx < 2:
+        return
+
+    page_bubbles = [b for b in bubbles if b["page"] == current_page_index]
+    bubble_idx = idx - 2
+
+    if bubble_idx >= len(page_bubbles):
+        return
+
+    on_bubble_edit(page_bubbles[bubble_idx])
 
 
 def on_bubble_delete_key(event):
@@ -920,10 +945,11 @@ bubble_listbox = tk.Listbox(
 )
 
 bubble_listbox.pack(fill="x", padx=5, pady=3)
-bubble_listbox.bind("<Double-Button-1>", on_bubble_edit)
-bubble_listbox.bind("<Return>", on_bubble_edit)
+bubble_listbox.bind("<Double-Button-1>", on_bubble_edit_mouse)
+bubble_listbox.bind("<Return>", on_bubble_edit_key)
 bubble_listbox.bind("<Button-1>", highlight_bubble)
 bubble_listbox.bind("<Delete>", on_bubble_delete_key)
+
 # Give initial focus so arrow keys work without first click
 root.after(50, bubble_listbox.focus_set)
 
