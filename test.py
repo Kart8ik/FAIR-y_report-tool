@@ -94,7 +94,7 @@ def render_overlays():
 
         if b.get("highlight"):
             outline = "red"
-            fill = "yellow"
+            fill = "SkyBlue"
             width = max(3, r / 6)
         else:
             outline = "red"
@@ -386,7 +386,26 @@ def add_bubble(event):
 
 
 
-def highlight_bubble(bubble, duration=5000):
+def highlight_bubble(event, duration=2000):
+    lb = event.widget
+    idx = lb.nearest(event.y)
+
+    if idx >= 0:
+        lb.selection_clear(0, tk.END)
+        lb.selection_set(idx)
+        lb.activate(idx)
+
+    if idx < 2:
+        return  # header rows
+
+    page_bubbles = [b for b in bubbles if b["page"] == current_page_index]
+    bubble_idx = idx - 2
+
+    if bubble_idx >= len(page_bubbles):
+        return
+
+    bubble = page_bubbles[bubble_idx]
+
     bubble["highlight"] = True
     render_overlays()
 
@@ -421,7 +440,7 @@ def on_bubble_edit(event):
 
     bubble = page_bubbles[bubble_idx]
 
-    highlight_bubble(bubble)
+    highlight_bubble(event)
 
     result = requirement_popup(existing=bubble)
 
@@ -748,6 +767,7 @@ bubble_listbox = tk.Listbox(
 
 bubble_listbox.pack(fill="x", padx=5, pady=3)
 bubble_listbox.bind("<Double-Button-1>", on_bubble_edit)
+bubble_listbox.bind("<Button-1>", highlight_bubble)
 
 
 canvas = tk.Canvas(root, bg="gray")
