@@ -1,6 +1,6 @@
 import fitz
 import tkinter as tk
-from tkinter import messagebox, filedialog, ttk
+from tkinter import messagebox, filedialog
 from PIL import Image, ImageTk
 from openpyxl import load_workbook
 from openpyxl.utils import range_boundaries
@@ -142,10 +142,6 @@ def open_pdf():
 # POPUP (Requirement / Tolerance)
 # =====================================================
 def requirement_popup(existing=None):
-    if not doc:
-        messagebox.showwarning("No File", "Open file to work on")
-        return
-
     popup = tk.Toplevel(root)
     popup.title("Edit FAIR Dimension" if existing else "FAIR Dimension Entry")
     apply_icon(popup)
@@ -158,122 +154,26 @@ def requirement_popup(existing=None):
 
     result = {"action": None}
 
-    tk.Label(popup, text="Characteristic Designator").grid(row=0, column=0, padx=8, pady=5, sticky="e")
+    tk.Label(popup, text="Characteristic").grid(row=0, column=0, padx=8, pady=5, sticky="e")
     tk.Label(popup, text="Requirement").grid(row=1, column=0, padx=8, pady=5, sticky="e")
     tk.Label(popup, text="- Tol").grid(row=2, column=0, padx=8, pady=5, sticky="e")
     tk.Label(popup, text="+ Tol").grid(row=3, column=0, padx=8, pady=5, sticky="e")
-    tk.Label(popup, text="Equipment Used").grid(row=4, column=0, padx=8, pady=5, sticky="e")
 
-    char = ttk.Combobox(
-        popup,
-        values = [
-            "--- BASIC DIMENSIONS ---",
-            "Length",
-            "Width",
-            "Thickness",
-            "Diameter",
-            "Radius",
-            "Chamfer",
-            "Angle",
-
-            "--- SLOT / CUTOUT ---",
-            "Slot length",
-            "Slot width",
-
-            "--- HOLE / LOCATION ---",
-            "Edge to edge",
-            "Edge to hole center",
-            "Hole center to edge",
-            "Hole center to hole center",
-            "Edge to slot",
-            "Slot to edge",
-
-            "--- BEND ---",
-            "Edge to bend",
-            "Bend to edge",
-            "Bend to bend",
-            "Bending radius",
-
-            "--- EXTRUSION ---",
-            "Extrusion height",
-            "Extrusion diameter",
-
-            "--- FASTENING ---",
-            "Tapping",
-            "Riveting",
-            "PEM",
-            "Torque test",
-
-            "--- FINISH ---",
-            "Coating thickness",
-            "Aesthetic parameters",
-
-            "--- GD&T ---",
-            "Flatness",
-            "Parallelism",
-            "Perpendicularity",
-            "Concentricity",
-
-            "--- MISC ---",
-            "Dimension",
-            "Ref dimension",
-            "Note",
-        ],
-        width=28
-    )
+    char = tk.Entry(popup, width=25)
     req  = tk.Entry(popup, width=20)
     neg  = tk.Entry(popup, width=10)
     pos  = tk.Entry(popup, width=10)
-    equip = ttk.Combobox(
-        popup,
-        values = [
-            "--- BASIC TOOLS ---",
-            "Visual",
-            "Vernier caliper",
-            "Digital vernier caliper",
-            "Digital micrometer",
-
-            "--- HEIGHT MEASUREMENT ---",
-            "Digital height gauge",
-            "Micro height gauge",
-
-            "--- REFERENCE ---",
-            "Slip gauge",
-
-            "--- FORM & ANGLE ---",
-            "Radius gauge",
-            "Feeler gauge",
-            "Bevel protractor",
-
-            "--- GO / NO-GO ---",
-            "Pin gauge",
-            "Thread plug gauge",
-
-            "--- SURFACE ---",
-            "DFT meter",
-
-            "--- ASSEMBLY ---",
-            "Torque wrench",
-
-            "--- ADVANCED ---",
-            "Profile projector",
-            "CMM",
-        ],
-        width=28
-    )
 
     if existing:
         char.insert(0, existing["char"])
         req.insert(0, existing["req"])
         neg.insert(0, existing["neg"])
         pos.insert(0, existing["pos"])
-        equip.insert(0, existing["equip"])
 
-    char.grid(row=0, column=1, padx=(0, 16))
+    char.grid(row=0, column=1)
     req.grid(row=1, column=1)
     neg.grid(row=2, column=1, sticky="w")
     pos.grid(row=3, column=1, sticky="w")
-    equip.grid(row=4, column=1, sticky="w")
 
     def save():
         if not req.get().strip():
@@ -285,7 +185,6 @@ def requirement_popup(existing=None):
             "req": req.get().strip(),
             "neg": neg.get().strip(),
             "pos": pos.get().strip(),
-            "equip": equip.get().strip()
         })
         popup.destroy()
 
@@ -294,17 +193,13 @@ def requirement_popup(existing=None):
             result["action"] = "delete"
             popup.destroy()
 
-    if not existing:
-        tk.Button(popup, text="Save", width=10, command=save).grid(
-            row=5, column=1, padx=(0, 20), pady=8, sticky="e"
-        )
+    tk.Button(popup, text="Save", width=10, command=save).grid(
+        row=4, column=0, padx=(20, 0), pady=8, sticky="w"
+    )
 
     if existing:
-        tk.Button(popup, text="Save", width=10, command=save).grid(
-            row=5, column=0, padx=(20, 0), pady=8, sticky="w"
-        )
         tk.Button(popup, text="Delete", width=10, fg="red", command=delete).grid(
-            row=5, column=1, padx=(0, 20), pady=8, sticky="e"
+            row=4, column=1, padx=(0, 20), pady=8, sticky="e"
         )
 
     popup.wait_window()
@@ -316,10 +211,6 @@ def requirement_popup(existing=None):
 # ADD BUBBLE (IMMEDIATE)
 # =====================================================
 def add_bubble(event):
-    if not doc:
-        messagebox.showwarning("No File", "Open file to work on")
-        return
-
     global bubble_no
 
     pdf_x = (event.x - offset_x) / zoom
@@ -335,7 +226,6 @@ def add_bubble(event):
         "req": "",
         "neg": "",
         "pos": "",
-        "equip": "",
         "highlight": False
     })
 
@@ -350,7 +240,6 @@ def add_bubble(event):
         bubbles[-1]["req"]  = data["req"]
         bubbles[-1]["neg"]  = data["neg"]
         bubbles[-1]["pos"]  = data["pos"]
-        bubbles[-1]["equip"]  = data["equip"]
         bubble_no += 1
     else:
         # If the dialog was closed or cancelled, discard the pending bubble
@@ -404,7 +293,6 @@ def on_bubble_edit(event):
         bubble["req"]  = result["req"]
         bubble["neg"]  = result["neg"]
         bubble["pos"]  = result["pos"]
-        bubble["equip"]  = result["equip"]
 
     elif result["action"] == "delete":
         bubbles.remove(bubble)
@@ -496,42 +384,25 @@ def undo():
 # LIST VIEW
 # =====================================================
 def update_bubble_list():
-    # Fixed column widths for neat alignment in the list view
-    w_no, w_char, w_req, w_tol, w_equip = 3, 28, 8, 6, 22
-    header = (
-        f"{'No':<{w_no}} | "
-        f"{'Char':<{w_char}} | "
-        f"{'Req':<{w_req}} | "
-        f"{'-Tol':<{w_tol}} | "
-        f"{'+Tol':<{w_tol}} | "
-        f"{'Equip':<{w_equip}}"
-    )
-    sep = "-" * len(header)
-
     bubble_listbox.delete(0, tk.END)
-    bubble_listbox.insert(tk.END, header)
-    bubble_listbox.insert(tk.END, sep)
+    bubble_listbox.insert(tk.END, "No | Char | Req | -Tol | +Tol")
+    bubble_listbox.insert(tk.END, "-" * 40)
 
     for b in bubbles:
         if b["page"] == current_page_index:
             bubble_listbox.insert(
                 tk.END,
-                f"{str(b['no']):<{w_no}} | "
-                f"{str(b['char']):<{w_char}} | "
-                f"{str(b['req']):<{w_req}} | "
-                f"{str(b['neg']):<{w_tol}} | "
-                f"{str(b['pos']):<{w_tol}} | "
-                f"{str(b['equip']):<{w_equip}}"
+                f"{str(b['no']).ljust(2)} | "
+                f"{str(b['char']).ljust(5)} | "
+                f"{str(b['req']).ljust(5)} | "
+                f"{str(b['neg']).ljust(4)} | "
+                f"{str(b['pos']).ljust(4)}"
             )
 
 # =====================================================
 # SAVE BUBBLED PDF
 # =====================================================
 def save_pdf():
-    if not doc:
-        messagebox.showwarning("No File", "No file to save PDF")
-        return
-
     if not bubbles:
         messagebox.showwarning("No data", "No bubbles to export")
         return
@@ -576,10 +447,6 @@ def save_pdf():
 # SAVE REPORT (UNCHANGED)
 # =====================================================
 def save_report():
-    if not doc:
-        messagebox.showwarning("No File", "No file to save Report")
-        return
-
     if not bubbles:
         messagebox.showwarning("No data", "No bubbles to export")
         return
@@ -670,7 +537,6 @@ def save_report():
         ws.cell(row=row, column=4).value = b["req"]
         ws.cell(row=row, column=5).value = b["neg"]
         ws.cell(row=row, column=6).value = b["pos"]
-        ws.cell(row=row, column=7).value = b["equip"]
         row += 1
 
     wb.save(report_file)
