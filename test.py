@@ -667,6 +667,7 @@ def show_shortcuts():
         ("Ctrl + S", "Save PDF"),
         ("Ctrl + Shift + S", "Save Report"),
         ("Escape", "Exit any Popup"),
+        ("Ctrl + Q", "Exit Application"),
         ("Ctrl + Z", "Undo Bubble"),
         ("Enter", "Edit Selected Bubble"),
         ("Delete", "Delete Selected Bubble"),
@@ -874,6 +875,16 @@ def save_report():
     messagebox.showinfo("Saved", f"FAIR report created:\n{report_file}")
 
 
+def on_app_close():
+    if bubbles:
+        msg = "You have unsaved bubbles.\n\nAre you sure you want to exit?"
+    else:
+        msg = "Are you sure you want to exit?"
+
+    if messagebox.askyesno("Exit FAIR-y", msg):
+        root.destroy()
+
+
 # =====================================================
 # UI
 # =====================================================
@@ -886,6 +897,7 @@ except Exception:
 root.title("FAIR-y")
 root.iconbitmap(resource_path("app-icon.ico"))
 
+root.protocol("WM_DELETE_WINDOW", on_app_close)
 
 toolbar = tk.Frame(root)
 toolbar.pack(fill="x", padx=5)
@@ -918,8 +930,7 @@ root.bind("<Control-minus>", zoom_out_key)
 root.bind("<Control-KP_Subtract>", zoom_out_key)
 root.bind("<Shift-Up>", radius_increase)
 root.bind("<Shift-Down>", radius_decrease)
-
-
+root.bind("<Control-q>", lambda e: on_app_close())
 
 bubble_radius_slider = tk.Scale(toolbar, from_=3, to=25, orient="horizontal", label="Bubble Size")
 bubble_radius_slider.set(6)
@@ -965,4 +976,5 @@ canvas.bind("<MouseWheel>", zoom_canvas)
 
 render()
 root.mainloop()
-doc.close()
+if doc:
+    doc.close()
