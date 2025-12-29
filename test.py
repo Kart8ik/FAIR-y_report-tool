@@ -439,24 +439,6 @@ def highlight_bubble(bubble, duration=2000):
 
     root.after(duration, clear)
 
-
-def get_selected_listbox_index(event, lb):
-    # Mouse event
-    if event is not None and hasattr(event, "y"):
-        idx = lb.nearest(event.y)
-        lb.selection_clear(0, tk.END)
-        lb.selection_set(idx)
-        lb.activate(idx)
-        return idx
-
-    # Keyboard event
-    sel = lb.curselection()
-    if sel:
-        return sel[0]
-
-    return None
-
-
 # =====================================================
 # EDIT BUBBLE (from list)
 # =====================================================
@@ -574,6 +556,7 @@ def apply_zoom(factor, center=None):
         root.after_cancel(zoom_job)
 
     zoom_job = root.after(120, lambda: render(force=True))
+    update_zoom_ui(zoom)
 
 def zoom_canvas(event):
     factor = 1.25 if event.delta > 0 else 1 / 1.25
@@ -947,26 +930,67 @@ def update_preview(val):
 bubble_radius_slider.config(command=update_preview)
 update_preview(bubble_radius_slider.get())
 
+def set_zoom_from_slider(val):
+    """Set absolute zoom from the slider (%), updating label and render."""
+    global zoom
+    try:
+        target = float(val) / 100.0
+    except Exception:
+        return
+    target = max(0.5, min(10.0, target))
+    if zoom_slider_updating:
+        return
+    apply_zoom(target / zoom)
+    update_zoom_ui(target)
+
+def update_zoom_ui(current_zoom):
+    """Keep zoom slider/label in sync after any zoom change (keys/mouse/slider)."""
+    pct = int(current_zoom * 100)
+    if 'zoom_slider' in globals():
+        global zoom_slider_updating
+        zoom_slider_updating = True
+        try:
+            zoom_slider.set(pct)
+        finally:
+            zoom_slider_updating = False
+
+zoom_slider_updating = False
+
+zoom_slider = tk.Scale(
+    toolbar,
+    from_=50,
+    to=1000,
+    orient="horizontal",
+    label="Zoom %",
+    command=set_zoom_from_slider
+)
+zoom_slider.set(int(zoom * 100))
+zoom_slider.pack(side="right")
+update_zoom_ui(zoom)
+
+# Splitter so the list can be resized by the user
+paned = tk.PanedWindow(root, orient="vertical")
+paned.pack(fill="both", expand=True)
+
 bubble_listbox = tk.Listbox(
-    root,
-    height=7,
+    paned,
     font=("Consolas", 10),
     selectmode="browse",
     exportselection=False
 )
 
-bubble_listbox.pack(fill="x", padx=5, pady=3)
 bubble_listbox.bind("<Double-Button-1>", on_bubble_edit_mouse)
 bubble_listbox.bind("<Return>", on_bubble_edit_key)
-bubble_listbox.bind("<Button-1>", highlight_bubble)
 bubble_listbox.bind("<Delete>", on_bubble_delete_key)
+
+paned.add(bubble_listbox, minsize=120)
 
 # Give initial focus so arrow keys work without first click
 root.after(50, bubble_listbox.focus_set)
 
 
-canvas = tk.Canvas(root, bg="gray")
-canvas.pack(fill="both", expand=True)
+canvas = tk.Canvas(paned, bg="gray")
+paned.add(canvas, minsize=200)
 
 canvas.bind("<Button-3>", add_bubble)
 canvas.bind("<Button-1>", start_pan)
