@@ -54,9 +54,6 @@ page_cache = {}  # cache rendered pages per (page_index, zoom)
 
 pan_start = None
 offset_x, offset_y = 0, 0
-# Two-point bubble placement state
-two_point_mode = False
-pending_start = None
 
 # =====================================================
 # RENDER PDF
@@ -85,19 +82,6 @@ def render_pdf():
 def render_overlays():
     canvas.delete("overlay")
 
-    # Pending start marker for two-point mode
-    if pending_start and pending_start["page"] == current_page_index:
-        sx = pending_start["x"] * zoom + offset_x
-        sy = pending_start["y"] * zoom + offset_y
-        marker_r = max(4, bubble_radius_slider.get() * zoom * 0.25)
-        canvas.create_oval(
-            sx - marker_r, sy - marker_r, sx + marker_r, sy + marker_r,
-            outline="red",
-            fill="red",
-            width=1,
-            tags="overlay"
-        )
-
     for b in bubbles:
         if b["page"] != current_page_index:
             continue
@@ -105,26 +89,6 @@ def render_overlays():
         x = b["x"] * zoom + offset_x
         y = b["y"] * zoom + offset_y
         r = b["r"] * zoom
-
-        # Draw connector if this bubble was placed via two-point mode
-        if b.get("start_x") is not None and b.get("start_y") is not None:
-            sx = b["start_x"] * zoom + offset_x
-            sy = b["start_y"] * zoom + offset_y
-            line_width = max(2, r / 10)
-            canvas.create_line(
-                sx, sy, x, y,
-                fill="red",
-                width=line_width,
-                tags="overlay"
-            )
-            handle_r = max(3, line_width)
-            canvas.create_oval(
-                sx - handle_r, sy - handle_r, sx + handle_r, sy + handle_r,
-                outline="red",
-                fill="red",
-                width=1,
-                tags="overlay"
-            )
 
         if b.get("highlight"):
             outline = "red"
@@ -167,7 +131,7 @@ def render(force=False):
 
 def open_pdf():
     global PDF_IN, doc, num_pages, current_page_index, bubbles, bubble_no
-    global offset_x, offset_y, page_cache, pending_start
+    global offset_x, offset_y, page_cache
 
     path = filedialog.askopenfilename(
         title="Select PDF",
@@ -188,10 +152,8 @@ def open_pdf():
     bubble_no = 1
     offset_x = offset_y = 0
     page_cache.clear()
-    pending_start = None
 
     render(force=True)
-    update_two_point_ui()
 
 
 
@@ -326,7 +288,7 @@ def requirement_popup(existing=None):
     )
 
     if existing:
-        # print(existing)
+        print(existing)
         char.insert(0, existing["char"])
         req.insert(0, existing["req"])
         neg.insert(0, existing["neg"])
@@ -359,7 +321,7 @@ def requirement_popup(existing=None):
             "pos": pos_val,
             "equip": equip.get().strip()
         })
-        # print(f"char: {char.get().strip()}, req: {req_val}, neg: {neg_val}, pos: {pos_val}, equip: {equip.get().strip()} \n")
+        print(f"char: {char.get().strip()}, req: {req_val}, neg: {neg_val}, pos: {pos_val}, equip: {equip.get().strip()} \n")
         popup.destroy()
 
     def delete():
@@ -408,44 +370,15 @@ def requirement_popup(existing=None):
 # =====================================================
 # ADD BUBBLE (IMMEDIATE)
 # =====================================================
-def clear_pending_start():
-    global pending_start
-    pending_start = None
-    render_overlays()
-    update_two_point_ui()
-
-
-def toggle_two_point_mode():
-    global two_point_mode
-    two_point_mode = not two_point_mode
-    clear_pending_start()
-    update_two_point_ui()
-
-
 def add_bubble(event):
     if not doc:
         messagebox.showwarning("No File", "Open file to work on")
         return
 
-    global bubble_no, pending_start
+    global bubble_no
 
     pdf_x = (event.x - offset_x) / zoom
     pdf_y = (event.y - offset_y) / zoom
-
-    # Two-click flow
-    if two_point_mode:
-        if pending_start and pending_start["page"] != current_page_index:
-            messagebox.showinfo("Two-Point Mode", "Start point was on another page. Starting over on this page.")
-            pending_start = None
-
-        if not pending_start:
-            pending_start = {"page": current_page_index, "x": pdf_x, "y": pdf_y}
-            render_overlays()
-            update_two_point_ui()
-            return
-        else:
-            start = pending_start
-            pending_start = None
 
     bubbles.append({
         "page": current_page_index,
@@ -458,9 +391,7 @@ def add_bubble(event):
         "neg": "",
         "pos": "",
         "equip": "",
-        "highlight": False,
-        "start_x": start["x"] if two_point_mode else None,
-        "start_y": start["y"] if two_point_mode else None,
+        "highlight": False
     })
 
 
@@ -479,11 +410,8 @@ def add_bubble(event):
     else:
         # If the dialog was closed or cancelled, discard the pending bubble
         bubbles.pop()
-        if two_point_mode:
-            clear_pending_start()
 
     render()
-    update_two_point_ui()
 
 
 # =====================================================
@@ -689,7 +617,6 @@ def next_page():
     if current_page_index < num_pages - 1:
         current_page_index += 1
         offset_x = offset_y = 0
-        clear_pending_start()
         render()
 
 def prev_page():
@@ -697,7 +624,6 @@ def prev_page():
     if current_page_index > 0:
         current_page_index -= 1
         offset_x = offset_y = 0
-        clear_pending_start()
         render()
 
 def undo():
@@ -730,8 +656,6 @@ def show_shortcuts():
         ("Escape", "Exit any Popup"),
         ("Ctrl + Q", "Exit Application"),
         ("Ctrl + Z", "Undo Bubble"),
-        ("Toolbar Button", "Toggle Two-Point Mode"),
-        ("Right-Click x2", "Two-point mode: start then end point"),
         ("Enter", "Edit Selected Bubble"),
         ("Delete", "Delete Selected Bubble"),
         ("Shift + ↑ / ↓", "Change Bubble Size"),
@@ -951,23 +875,6 @@ def on_app_close():
 # =====================================================
 # UI
 # =====================================================
-def update_two_point_ui():
-    if "two_point_button" not in globals():
-        return
-    mode_text = "Two-Point Mode: On" if two_point_mode else "Two-Point Mode: Off"
-    if pending_start and pending_start.get("page") == current_page_index:
-        hint = "Two-point: start saved, right-click end point"
-    elif two_point_mode:
-        hint = "Two-point: right-click start, then right-click end"
-    else:
-        hint = "Right-click once to add a bubble"
-    two_point_button.config(
-        text=mode_text,
-        relief="sunken" if two_point_mode else "raised"
-    )
-    two_point_hint.config(text=hint)
-
-
 root = tk.Tk()
 # Start maximized to use full screen
 try:
@@ -992,10 +899,6 @@ tk.Button(toolbar, text="Undo Bubble", command=undo).pack(side="left")
 tk.Button(toolbar, text="Save PDF", command=save_pdf).pack(side="left")
 tk.Button(toolbar, text="Save Report", command=save_report).pack(side="left")
 tk.Button(toolbar, text="Shortcuts", command=show_shortcuts).pack(side="left")
-two_point_button = tk.Button(toolbar, text="Two-Point Mode: Off", command=toggle_two_point_mode)
-two_point_button.pack(side="left", padx=(8, 0))
-two_point_hint = tk.Label(toolbar, text="Right-click once to add a bubble", fg="gray25")
-two_point_hint.pack(side="left", padx=(6, 0))
 
 #=======================================================
 # Keyboard Button Binds
@@ -1034,7 +937,6 @@ def update_preview(val):
 
 bubble_radius_slider.config(command=update_preview)
 update_preview(bubble_radius_slider.get())
-update_two_point_ui()
 
 def set_zoom_from_slider(val):
     """Set absolute zoom from the slider (%), updating label and render."""
