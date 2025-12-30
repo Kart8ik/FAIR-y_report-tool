@@ -89,7 +89,7 @@ def render_overlays():
     if pending_start and pending_start["page"] == current_page_index:
         sx = pending_start["x"] * zoom + offset_x
         sy = pending_start["y"] * zoom + offset_y
-        marker_r = max(4, bubble_radius_slider.get() * zoom * 0.25)
+        marker_r = max(3, (bubble_radius_slider.get() * zoom) / 10)
         canvas.create_oval(
             sx - marker_r, sy - marker_r, sx + marker_r, sy + marker_r,
             outline="red",
@@ -111,8 +111,17 @@ def render_overlays():
             sx = b["start_x"] * zoom + offset_x
             sy = b["start_y"] * zoom + offset_y
             line_width = max(2, r / 10)
+            dx = x - sx
+            dy = y - sy
+            dist = (dx * dx + dy * dy) ** 0.5
+            if dist < 1e-6:
+                ex, ey = x, y
+            else:
+                scale = r / dist
+                ex = x - dx * scale
+                ey = y - dy * scale
             canvas.create_line(
-                sx, sy, x, y,
+                sx, sy, ex, ey,
                 fill="red",
                 width=line_width,
                 tags="overlay"
@@ -729,6 +738,7 @@ def show_shortcuts():
         ("Ctrl + Shift + S", "Save Report"),
         ("Escape", "Exit any Popup"),
         ("Ctrl + Q", "Exit Application"),
+        ("Ctrl + T", "Toggle Bubble Mode"),
         ("Ctrl + Z", "Undo Bubble"),
         ("Toolbar Button", "Toggle Two-Point Mode"),
         ("Right-Click x2", "Two-point mode: start then end point"),
@@ -817,6 +827,26 @@ def save_pdf():
         for b in bubbles:
             if b["page"] == i:
                 x, y, r = b["x"], b["y"], b["r"]
+                # Draw connector if present (project to bubble edge)
+                if b.get("start_x") is not None and b.get("start_y") is not None:
+                    sx, sy = b["start_x"], b["start_y"]
+                    dx = x - sx
+                    dy = y - sy
+                    dist = (dx * dx + dy * dy) ** 0.5
+                    if dist < 1e-6:
+                        ex, ey = x, y
+                    else:
+                        scale = r / dist
+                        ex = x - dx * scale
+                        ey = y - dy * scale
+                    p.draw_line(fitz.Point(sx, sy), fitz.Point(ex, ey), color=(1, 0, 0), width=r/10)
+                    handle_r = r/10
+                    p.draw_oval(
+                        fitz.Rect(sx - handle_r, sy - handle_r, sx + handle_r, sy + handle_r),
+                        color=(1, 0, 0),
+                        fill=(1, 0, 0),
+                        width=1
+                    )
                 p.draw_oval(fitz.Rect(x-r, y-r, x+r, y+r), color=(1,0,0), width=r/10)
                 text = str(b["no"])
                 font_size = r
@@ -954,18 +984,12 @@ def on_app_close():
 def update_two_point_ui():
     if "two_point_button" not in globals():
         return
-    mode_text = "Two-Point Mode: On" if two_point_mode else "Two-Point Mode: Off"
-    if pending_start and pending_start.get("page") == current_page_index:
-        hint = "Two-point: start saved, right-click end point"
-    elif two_point_mode:
-        hint = "Two-point: right-click start, then right-click end"
-    else:
-        hint = "Right-click once to add a bubble"
+    mode_text = "Bubble with Line" if two_point_mode else "Bubble without Line"
     two_point_button.config(
         text=mode_text,
         relief="sunken" if two_point_mode else "raised"
     )
-    two_point_hint.config(text=hint)
+    render_two_point_preview()
 
 
 root = tk.Tk()
@@ -991,11 +1015,32 @@ tk.Button(toolbar, text="Next Page", command=next_page).pack(side="left")
 tk.Button(toolbar, text="Undo Bubble", command=undo).pack(side="left")
 tk.Button(toolbar, text="Save PDF", command=save_pdf).pack(side="left")
 tk.Button(toolbar, text="Save Report", command=save_report).pack(side="left")
-tk.Button(toolbar, text="Shortcuts", command=show_shortcuts).pack(side="left")
-two_point_button = tk.Button(toolbar, text="Two-Point Mode: Off", command=toggle_two_point_mode)
-two_point_button.pack(side="left", padx=(8, 0))
-two_point_hint = tk.Label(toolbar, text="Right-click once to add a bubble", fg="gray25")
-two_point_hint.pack(side="left", padx=(6, 0))
+tk.Button(toolbar, text="Help", command=show_shortcuts).pack(side="left")
+
+def render_two_point_preview():
+    if "two_point_preview" not in globals():
+        return
+    c = two_point_preview
+    c.delete("all")
+    w = int(c.cget("width"))
+    h = int(c.cget("height"))
+    padding = 6
+    r = 9
+    cx = w - padding - r
+    cy = h // 2
+    outline = "red"
+    if two_point_mode:
+        sx = padding + 4
+        sy = cy
+        # project line to circle edge
+        dx = cx - sx
+        dy = cy - sy
+        dist = (dx * dx + dy * dy) ** 0.5 or 1
+        ex = cx - dx * (r / dist)
+        ey = cy - dy * (r / dist)
+        c.create_line(sx, sy, ex, ey, fill=outline, width=2)
+        c.create_oval(sx-3, sy-3, sx+3, sy+3, outline=outline, fill=outline, width=1)
+    c.create_oval(cx-r, cy-r, cx+r, cy+r, outline=outline, width=2)
 
 #=======================================================
 # Keyboard Button Binds
@@ -1019,23 +1064,10 @@ root.bind("<Shift-Up>", radius_increase)
 root.bind("<Shift-Down>", radius_decrease)
 root.bind("<Control-Q>", lambda e: on_app_close())
 root.bind("<Control-q>", lambda e: on_app_close())
+root.bind("<Control-T>", lambda e: toggle_two_point_mode())
+root.bind("<Control-t>", lambda e: toggle_two_point_mode())
 
-bubble_radius_slider = tk.Scale(toolbar, from_=3, to=25, orient="horizontal", label="Bubble Size")
-bubble_radius_slider.set(6)
-bubble_radius_slider.pack(side="right")
-
-preview_canvas = tk.Canvas(toolbar, width=50, height=50, bg="gray")
-preview_canvas.pack(side="right", padx=5)
-
-def update_preview(val):
-    preview_canvas.delete("all")
-    r = int(val) * zoom
-    preview_canvas.create_oval(25-r, 25-r, 25+r, 25+r, outline="red", width=2)
-
-bubble_radius_slider.config(command=update_preview)
-update_preview(bubble_radius_slider.get())
-update_two_point_ui()
-
+#=========================zoom slider===============================
 def set_zoom_from_slider(val):
     """Set absolute zoom from the slider (%), updating label and render."""
     global zoom
@@ -1071,8 +1103,30 @@ zoom_slider = tk.Scale(
     command=set_zoom_from_slider
 )
 zoom_slider.set(int(zoom * 100))
-zoom_slider.pack(side="right")
+zoom_slider.pack(padx=5, side="right")
 update_zoom_ui(zoom)
+
+bubble_radius_slider = tk.Scale(toolbar, from_=3, to=25, orient="horizontal", label="Bubble Size")
+bubble_radius_slider.set(6)
+bubble_radius_slider.pack(side="right")
+
+preview_canvas = tk.Canvas(toolbar, width=50, height=50, bg="gray")
+preview_canvas.pack(side="right", padx=5)
+
+def update_preview(val):
+    preview_canvas.delete("all")
+    r = int(val) * zoom
+    preview_canvas.create_oval(25-r, 25-r, 25+r, 25+r, outline="red", width=2)
+
+bubble_radius_slider.config(command=update_preview)
+update_preview(bubble_radius_slider.get())
+update_two_point_ui()
+
+#===========================two-point-mode====================================
+two_point_button = tk.Button(toolbar, text="Bubble without line", width= 16, command=toggle_two_point_mode)
+two_point_button.pack(side="right", padx=(8, 0))
+two_point_preview = tk.Canvas(toolbar, width=50, height=50, bg="gray", highlightthickness=0)
+two_point_preview.pack(side="right", padx=(6, 0))
 
 # Splitter so the list can be resized by the user
 paned = tk.PanedWindow(root, orient="vertical")
