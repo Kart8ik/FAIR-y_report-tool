@@ -1,3 +1,4 @@
+from typing import ValuesView
 import fitz
 import tkinter as tk
 from tkinter import messagebox, filedialog, ttk
@@ -9,6 +10,7 @@ import shutil
 from copy import copy
 import sys, os
 
+#================resolves path of files to be used with pyinstaller
 def resource_path(relative_path):
     try:
         base_path = sys._MEIPASS   # PyInstaller temp dir
@@ -32,6 +34,14 @@ def to_number(value):
     except ValueError:
         return value
 
+def to_number_list_item(value):
+    if isinstance(value, (int, float)):
+        return value
+    try:
+        return int(value) if value.isdigit() else float(value)
+    except ValueError:
+        return 0
+
 
 
 # ================= FILES =================
@@ -41,7 +51,7 @@ doc = None
 num_pages = 0
 current_page_index = 0
 current_page = None  # set after a PDF is opened via open_pdf()
-TEMPLATE_XLSX = resource_path("FORMAT.xlsx")
+TEMPLATE_XLSX = resource_path("FORMAT_WORBYN.xlsx")
 
 # ================= STATE =================
 zoom = 1.5
@@ -207,10 +217,6 @@ def open_pdf():
 # =====================================================
 # POPUP (Requirement / Tolerance)
 # =====================================================
-
-def safe_insert(entry, value): #function to ensure values are stored safely in string form only
-    entry.insert(0, "" if value is None else str(value))
-
 def requirement_popup(existing=None):
     if not doc:
         messagebox.showwarning("No File", "Open file to work on")
@@ -230,8 +236,7 @@ def requirement_popup(existing=None):
 
     tk.Label(popup, text="Characteristic Designator").grid(row=0, column=0, padx=8, pady=5, sticky="e")
     tk.Label(popup, text="Requirement").grid(row=1, column=0, padx=8, pady=5, sticky="e")
-    tk.Label(popup, text="- Tol").grid(row=2, column=0, padx=8, pady=5, sticky="e")
-    tk.Label(popup, text="+ Tol").grid(row=3, column=0, padx=8, pady=5, sticky="e")
+    tk.Label(popup, text="Tolerance").grid(row=2, column=0, padx=8, pady=5, sticky="e")
     tk.Label(popup, text="Equipment Used").grid(row=4, column=0, padx=8, pady=5, sticky="e")
 
     char = ttk.Combobox(
@@ -293,8 +298,7 @@ def requirement_popup(existing=None):
     )
 
     req = tk.Entry(popup, validate="key")
-    neg = tk.Entry(popup, validate="key")
-    pos = tk.Entry(popup, validate="key")
+    tol = tk.Entry(popup, validate="key")
 
     equip = ttk.Combobox(
         popup,
@@ -338,14 +342,12 @@ def requirement_popup(existing=None):
         # print(existing)
         char.insert(0, existing["char"])
         req.insert(0, existing["req"])
-        neg.insert(0, existing["neg"])
-        pos.insert(0, existing["pos"])
+        tol.insert(0, existing["tol"])
         equip.insert(0, existing["equip"])
 
     char.grid(row=0, column=1, padx=(0, 16))
     req.grid(row=1, column=1, sticky="w")
-    neg.grid(row=2, column=1, sticky="w")
-    pos.grid(row=3, column=1, sticky="w")
+    tol.grid(row=2, column=1, sticky="w")
     equip.grid(row=4, column=1, sticky="w")
 
     # moves the cursor to the input for ease of use
@@ -354,8 +356,7 @@ def requirement_popup(existing=None):
 
     def save():
         req_val = to_number(req.get().strip())
-        neg_val = to_number(neg.get().strip())
-        pos_val = to_number(pos.get().strip())
+        tol_val = to_number(tol.get().strip())
 
         if not req.get().strip():
             messagebox.showwarning("Missing", "Requirement is mandatory")
@@ -364,11 +365,10 @@ def requirement_popup(existing=None):
             "action": "save",
             "char": char.get().strip(),
             "req": req_val,
-            "neg": neg_val,
-            "pos": pos_val,
+            "tol": tol_val,
             "equip": equip.get().strip()
         })
-        # print(f"char: {char.get().strip()}, req: {req_val}, neg: {neg_val}, pos: {pos_val}, equip: {equip.get().strip()} \n")
+        # print(f"char: {char.get().strip()}, req: {req_val}, tol: {tol_val}, pos: {pos_val}, equip: {equip.get().strip()} \n")
         popup.destroy()
 
     def delete():
@@ -392,20 +392,16 @@ def requirement_popup(existing=None):
     # key binds for ease of use
     char.bind("<Return>", lambda e: req.focus_set())
 
-    req.bind("<Return>", lambda e: neg.focus_set())
+    req.bind("<Return>", lambda e: tol.focus_set())
     req.bind("<Up>", lambda e: char.focus_set())
-    req.bind("<Down>", lambda e: neg.focus_set())
+    req.bind("<Down>", lambda e: tol.focus_set())
 
-    neg.bind("<Return>", lambda e: pos.focus_set())
-    neg.bind("<Up>", lambda e: req.focus_set())
-    neg.bind("<Down>", lambda e: pos.focus_set())
-
-    pos.bind("<Return>", lambda e: equip.focus_set())
-    pos.bind("<Up>", lambda e: neg.focus_set())
-    pos.bind("<Down>", lambda e: equip.focus_set())
+    tol.bind("<Return>", lambda e: equip.focus_set())
+    tol.bind("<Up>", lambda e: req.focus_set())
+    tol.bind("<Down>", lambda e: equip.focus_set())
 
     equip.bind("<Return>", lambda e: save())
-    equip.bind("<Up>", lambda e: pos.focus_set())
+    equip.bind("<Up>", lambda e: tol.focus_set())
 
     popup.bind("<Escape>", lambda e: popup.destroy())
 
@@ -464,8 +460,7 @@ def add_balloon(event):
         "r": balloon_radius_slider.get(),
         "char": "",
         "req": "",
-        "neg": "",
-        "pos": "",
+        "tol": "",
         "equip": "",
         "highlight": False,
         "start_x": start["x"] if two_point_mode else None,
@@ -481,8 +476,7 @@ def add_balloon(event):
     if data.get("action") == "save":
         balloons[-1]["char"] = data["char"]
         balloons[-1]["req"]  = data["req"]
-        balloons[-1]["neg"]  = data["neg"]
-        balloons[-1]["pos"]  = data["pos"]
+        balloons[-1]["tol"]  = data["tol"]
         balloons[-1]["equip"]  = data["equip"]
         balloon_no += 1
     else:
@@ -512,7 +506,9 @@ def delete_balloon(balloon):
     render(force=True)
 
 
-
+# =====================================================
+# highlights balloon when selected to edit 
+# =====================================================
 def highlight_balloon(balloon, duration=2000):
 
     balloon["highlight"] = True
@@ -536,8 +532,7 @@ def on_balloon_edit(balloon):
     if result["action"] == "save":
         balloon["char"] = result["char"]
         balloon["req"]  = result["req"]
-        balloon["neg"]  = result["neg"]
-        balloon["pos"]  = result["pos"]
+        balloon["tol"]  = result["tol"]
         balloon["equip"]  = result["equip"]
 
     elif result["action"] == "delete":
@@ -772,8 +767,9 @@ def update_balloon_list():
         f"{'No':<{w_no}} | "
         f"{'Char':<{w_char}} | "
         f"{'Req':<{w_req}} | "
-        f"{'-Tol':<{w_tol}} | "
-        f"{'+Tol':<{w_tol}} | "
+        f"{'Tol':<{w_tol}} | "
+        f"{'Low':<{w_tol}} | "
+        f"{'Up':<{w_tol}} | "
         f"{'Equip':<{w_equip}}"
     )
     sep = "-" * len(header)
@@ -789,13 +785,14 @@ def update_balloon_list():
                 f"{str(b['no']):<{w_no}} | "
                 f"{str(b['char']):<{w_char}} | "
                 f"{str(b['req']):<{w_req}} | "
-                f"{str(b['neg']):<{w_tol}} | "
-                f"{str(b['pos']):<{w_tol}} | "
+                f"{str(b['tol']):<{w_tol}} | "
+                f"{str(to_number_list_item(b['req']) - to_number_list_item(b['tol'])):<{w_tol}} | "
+                f"{str(to_number_list_item(b['req']) + to_number_list_item(b['tol'])):<{w_tol}} | "
                 f"{str(b['equip']):<{w_equip}}"
             )
 
 # =====================================================
-# SAVE balloonD PDF
+# SAVE BALLOONED PDF
 # =====================================================
 def save_pdf():
     if not doc:
@@ -868,7 +865,7 @@ def save_pdf():
 
 
 # =====================================================
-# SAVE REPORT (UNCHANGED)
+# SAVE REPORT
 # =====================================================
 def save_report():
     if not doc:
@@ -898,14 +895,14 @@ def save_report():
 
     # The template has 15 data rows (8-22). Row 23 participates in the merged
     # Legends block (A23:B24, C23:M24), so we must insert before that at row 23.
-    START_ROW = 8
-    TEMPLATE_ROWS = 15
+    START_ROW = 12
+    TEMPLATE_ROWS = 42
     LAST_TEMPLATE_ROW = START_ROW + TEMPLATE_ROWS - 1  # 22
     INSERT_AT = LAST_TEMPLATE_ROW + 1                  # 23 (just before merged legends)
     template_row_idx = LAST_TEMPLATE_ROW
-    footer_rows = {24: ws.row_dimensions[24].height,
-                   25: ws.row_dimensions[25].height,
-                   26: ws.row_dimensions[26].height}
+    footer_rows = {55: ws.row_dimensions[55].height,
+                   56: ws.row_dimensions[56].height,
+                   57: ws.row_dimensions[57].height}
 
     def copy_row_style(src_row_idx, dest_row_idx, clear_values=True):
         # Copy styles across all columns to preserve borders/alignment
@@ -932,9 +929,8 @@ def save_report():
         # Re-merge the footer block (Legends/Observations/Sign-off) so it
         # stays intact after the shift, and restore footer row heights.
         footer_merges = [
-            "A24:B24", "C24:M24",
-            "D25:M25",
-            "A26:B26", "C26:D26", "E26:F26", "G26:H26", "I26:J26", "K26:M26",
+            "A55:C55", "D55:L55",
+            "G56:H56","I56:L56",
         ]
         for rng in footer_merges:
             if rng in ws.merged_cells:
@@ -961,11 +957,12 @@ def save_report():
     for b in balloons:
         ws.cell(row=row, column=1).value = b["page"] + 1
         ws.cell(row=row, column=2).value = b["no"]
-        ws.cell(row=row, column=3).value = b['char']
-        ws.cell(row=row, column=4).value = b["req"]
-        ws.cell(row=row, column=5).value = b["neg"]
-        ws.cell(row=row, column=6).value = b["pos"]
-        ws.cell(row=row, column=7).value = b["equip"]
+        ws.cell(row=row, column=4).value = b['char']
+        ws.cell(row=row, column=5).value = b["req"]
+        ws.cell(row=row, column=6).value = b["tol"]
+        ws.cell(row=row, column=7).value = to_number_list_item(b['req']) - to_number_list_item(b['tol'])
+        ws.cell(row=row, column=8).value = to_number_list_item(b['req']) + to_number_list_item(b['tol'])
+        ws.cell(row=row, column=9).value = b["equip"]
         row += 1
 
     wb.save(report_file)
@@ -976,7 +973,7 @@ def save_report():
     except Exception:
         pass
 
-
+#===========handles quitting of app to safely quit without losing information===========
 def on_app_close():
     if balloons:
         msg = "You have unsaved balloons.\n\nAre you sure you want to exit?"
