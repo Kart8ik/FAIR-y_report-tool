@@ -234,10 +234,14 @@ def requirement_popup(existing=None):
 
     result = {"action": None}
 
-    tk.Label(popup, text="Characteristic Designator").grid(row=0, column=0, padx=8, pady=5, sticky="e")
-    tk.Label(popup, text="Requirement").grid(row=1, column=0, padx=8, pady=5, sticky="e")
-    tk.Label(popup, text="Tolerance").grid(row=2, column=0, padx=8, pady=5, sticky="e")
+
+    tk.Label(popup, text="Zone").grid(row=0, column=0, padx=8, pady=5, sticky="e")
+    tk.Label(popup, text="Characteristic Designator").grid(row=1, column=0, padx=8, pady=5, sticky="e")
+    tk.Label(popup, text="Requirement").grid(row=2, column=0, padx=8, pady=5, sticky="e")
+    tk.Label(popup, text="Tolerance").grid(row=3, column=0, padx=8, pady=5, sticky="e")
     tk.Label(popup, text="Equipment Used").grid(row=4, column=0, padx=8, pady=5, sticky="e")
+
+    zone = tk.Entry(popup, validate="key")
 
     char = ttk.Combobox(
         popup,
@@ -340,18 +344,20 @@ def requirement_popup(existing=None):
 
     if existing:
         # print(existing)
+        zone.insert(0, existing["zone"])
         char.insert(0, existing["char"])
         req.insert(0, existing["req"])
         tol.insert(0, existing["tol"])
         equip.insert(0, existing["equip"])
 
-    char.grid(row=0, column=1, padx=(0, 16))
-    req.grid(row=1, column=1, sticky="w")
-    tol.grid(row=2, column=1, sticky="w")
+    zone.grid(row=0, column=1, sticky="w")
+    char.grid(row=1, column=1, padx=(0, 16))
+    req.grid(row=2, column=1, sticky="w")
+    tol.grid(row=3, column=1, sticky="w")
     equip.grid(row=4, column=1, sticky="w")
 
     # moves the cursor to the input for ease of use
-    char.focus_set()
+    zone.focus_set()
     popup.after(50, lambda: char.select_range(0, tk.END))
 
     def save():
@@ -363,6 +369,7 @@ def requirement_popup(existing=None):
             return
         result.update({
             "action": "save",
+            "zone": zone.get().strip(),
             "char": char.get().strip(),
             "req": req_val,
             "tol": tol_val,
@@ -390,7 +397,12 @@ def requirement_popup(existing=None):
         )
 
     # key binds for ease of use
+
+    zone.bind("<Return>", lambda e: char.focus_set())
+    zone.bind("<Down>", lambda e: char.focus_set())
+
     char.bind("<Return>", lambda e: req.focus_set())
+    char.bind("<Up>", lambda e: zone.focus_set())
 
     req.bind("<Return>", lambda e: tol.focus_set())
     req.bind("<Up>", lambda e: char.focus_set())
@@ -458,6 +470,7 @@ def add_balloon(event):
         "x": pdf_x,
         "y": pdf_y,
         "r": balloon_radius_slider.get(),
+        "zone": "",
         "char": "",
         "req": "",
         "tol": "",
@@ -474,6 +487,7 @@ def add_balloon(event):
 
     # requirement_popup returns {"action": "save"|"delete"|None, ...}
     if data.get("action") == "save":
+        balloons[-1]["zone"] = data["zone"]
         balloons[-1]["char"] = data["char"]
         balloons[-1]["req"]  = data["req"]
         balloons[-1]["tol"]  = data["tol"]
@@ -530,6 +544,7 @@ def on_balloon_edit(balloon):
     result = requirement_popup(existing=balloon)
 
     if result["action"] == "save":
+        balloon["zone"] = result["zone"]
         balloon["char"] = result["char"]
         balloon["req"]  = result["req"]
         balloon["tol"]  = result["tol"]
@@ -762,9 +777,10 @@ def show_shortcuts():
 # =====================================================
 def update_balloon_list():
     # Fixed column widths for neat alignment in the list view
-    w_no, w_char, w_req, w_tol, w_equip = 3, 28, 8, 6, 22
+    w_no, w_zone, w_char, w_req, w_tol, w_equip = 3, 6, 28, 8, 6, 22
     header = (
         f"{'No':<{w_no}} | "
+        f"{'Zone':<{w_zone}} | "
         f"{'Char':<{w_char}} | "
         f"{'Req':<{w_req}} | "
         f"{'Tol':<{w_tol}} | "
@@ -783,11 +799,12 @@ def update_balloon_list():
             balloon_listbox.insert(
                 tk.END,
                 f"{str(b['no']):<{w_no}} | "
+                f"{str(b['zone']):<{w_zone}} | "
                 f"{str(b['char']):<{w_char}} | "
                 f"{str(b['req']):<{w_req}} | "
                 f"{str(b['tol']):<{w_tol}} | "
-                f"{str(to_number_list_item(b['req']) - to_number_list_item(b['tol'])):<{w_tol}} | "
-                f"{str(to_number_list_item(b['req']) + to_number_list_item(b['tol'])):<{w_tol}} | "
+                f"{str(round(to_number_list_item(b['req']) - to_number_list_item(b['tol']), 2)):<{w_tol}} | "
+                f"{str(round(to_number_list_item(b['req']) + to_number_list_item(b['tol']), 2)):<{w_tol}} | "
                 f"{str(b['equip']):<{w_equip}}"
             )
 
@@ -957,6 +974,7 @@ def save_report():
     for b in balloons:
         ws.cell(row=row, column=1).value = b["page"] + 1
         ws.cell(row=row, column=2).value = b["no"]
+        ws.cell(row=row, column=3).value = b["zone"]
         ws.cell(row=row, column=4).value = b['char']
         ws.cell(row=row, column=5).value = b["req"]
         ws.cell(row=row, column=6).value = b["tol"]
