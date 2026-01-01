@@ -60,6 +60,7 @@ balloon_no = 1
 balloons = []
 last_balloon_cache = {"zone": "", "char": "", "req": "", "tol": "", "equip": ""}
 current_project_path = None
+project_dirty = False
 rendered_img = None
 rendered_zoom = None
 rendered_page_index = None
@@ -189,7 +190,7 @@ def render(force=False):
 
 def open_pdf():
     global PDF_IN, doc, num_pages, current_page_index, balloons, balloon_no
-    global offset_x, offset_y, page_cache, pending_start
+    global offset_x, offset_y, page_cache, pending_start, project_dirty, current_project_path
 
     path = filedialog.askopenfilename(
         title="Select PDF",
@@ -211,6 +212,10 @@ def open_pdf():
     offset_x = offset_y = 0
     page_cache.clear()
     pending_start = None
+    
+    # Fresh start - no project file associated, clean state
+    current_project_path = None
+    project_dirty = False
 
     render(force=True)
     update_two_point_ui()
@@ -608,6 +613,10 @@ def add_balloon(event):
         balloons[-1]["tol"]  = data["tol"]
         balloons[-1]["equip"]  = data["equip"]
         balloon_no += 1
+        
+        # Mark project as dirty
+        global project_dirty
+        project_dirty = True
     else:
         # If the dialog was closed or cancelled, discard the pending balloon
         balloons.pop()
@@ -628,8 +637,9 @@ def delete_balloon(balloon):
     for i, b in enumerate(balloons, start=1):
         b["no"] = i
 
-    global balloon_no
+    global balloon_no, project_dirty
     balloon_no = len(balloons) + 1
+    project_dirty = True
 
     update_balloon_list()
     render(force=True)
@@ -664,6 +674,10 @@ def on_balloon_edit(balloon):
         balloon["req"]  = result["req"]
         balloon["tol"]  = result["tol"]
         balloon["equip"]  = result["equip"]
+        
+        # Mark project as dirty
+        global project_dirty
+        project_dirty = True
 
     elif result["action"] == "delete":
         delete_balloon(balloon)
@@ -835,11 +849,12 @@ def prev_page():
         render()
 
 def undo():
-    global balloon_no
+    global balloon_no, project_dirty
     for i in reversed(range(len(balloons))):
         if balloons[i]["page"] == current_page_index:
             balloons.pop(i)
             balloon_no -= 1
+            project_dirty = True
             break
     render()
 
@@ -1112,28 +1127,11 @@ def save_report():
 # =====================================================
 # SAVE PROJECT (.fairy)
 # =====================================================
-def save_project():
-    if not doc:
-        messagebox.showwarning("No File", "No file to save project")
-        return
-
-    if not balloons:
-        messagebox.showwarning("No data", "No balloons to save")
-        return
-
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
-    default_name = f"FAIR_Project_{timestamp}.fairy"
-
-    project_file = filedialog.asksaveasfilename(
-        title="Save Project As",
-        initialfile=default_name,
-        defaultextension=".fairy",
-        filetypes=[("FAIR Project files", "*.fairy"), ("All files", "*.*")]
-    )
-
-    if not project_file:
-        return
-
+def save_project_to_path(project_file):
+    """Save project to a specific path without dialog. Returns True on success."""
+    if not doc or not balloons:
+        return False
+    
     # Build project data structure
     project_data = {
         "version": 1,
@@ -1170,13 +1168,48 @@ def save_project():
         with open(project_file, 'w') as f:
             json.dump(project_data, f, indent=2)
         
-        # Track current project for session persistence
-        global current_project_path
+        # Track current project for session persistence and mark clean
+        global current_project_path, project_dirty
         current_project_path = project_file
-        
+        project_dirty = False
+
+        state = {"last_project": project_file}
+        save_app_state(state)
+
+        return True
+    except Exception:
+        return False
+
+
+def save_project():
+    """Save project with dialog (Save As behavior)."""
+    if not doc:
+        messagebox.showwarning("No File", "No file to save project")
+        return False
+
+    if not balloons:
+        messagebox.showwarning("No data", "No balloons to save")
+        return False
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
+    default_name = f"FAIR_Project_{timestamp}.fairy"
+
+    project_file = filedialog.asksaveasfilename(
+        title="Save Project As",
+        initialfile=default_name,
+        defaultextension=".fairy",
+        filetypes=[("FAIR Project files", "*.fairy"), ("All files", "*.*")]
+    )
+
+    if not project_file:
+        return False
+    
+    if save_project_to_path(project_file):
         messagebox.showinfo("Saved", f"Project saved successfully:\n{project_file}")
-    except Exception as e:
-        messagebox.showerror("Save Error", f"Failed to save project:\n{str(e)}")
+        return True
+    else:
+        messagebox.showerror("Save Error", "Failed to save project")
+        return False
 
 
 # =====================================================
@@ -1234,7 +1267,7 @@ def load_project_from_path(project_file, show_success_msg=True, prompt_for_pdf=T
 
     # Close existing document if open
     global doc, PDF_IN, num_pages, current_page_index, balloons, balloon_no
-    global zoom, offset_x, offset_y, page_cache, pending_start
+    global zoom, offset_x, offset_y, page_cache, pending_start, project_dirty
 
     if doc:
         doc.close()
@@ -1303,6 +1336,9 @@ def load_project_from_path(project_file, show_success_msg=True, prompt_for_pdf=T
     # Render the first page
     render(force=True)
     update_two_point_ui()
+    
+    # Mark project as clean after successful load
+    project_dirty = False
 
     # Show warnings if any bubbles were skipped
     if show_success_msg:
@@ -1398,19 +1434,32 @@ def auto_restore_last_project():
 
 #===========handles quitting of app to safely quit without losing information===========
 def on_app_close():
-    # Save current session state
-    if current_project_path:
-        state = {"last_project": current_project_path}
-        save_app_state(state)
     
-    # Existing unsaved warning logic
-    if balloons:
-        msg = "You have unsaved balloons.\n\nAre you sure you want to exit?"
-    else:
-        msg = "Are you sure you want to exit?"
-
-    if messagebox.askyesno("Exit FAIR-y", msg):
+    # Check for unsaved changes
+    if not project_dirty:
         root.destroy()
+        return
+    
+    # Ask user what to do with unsaved changes
+    choice = messagebox.askyesnocancel(
+        "Unsaved Changes",
+        "You have unsaved changes to the project.\n\nSave before closing?"
+    )
+    
+    if choice is True:  # Save
+        # If project has a path, save silently; otherwise show Save As dialog
+        if current_project_path:
+            if save_project_to_path(current_project_path):
+                root.destroy()
+            # If save failed, don't close
+        else:
+            # No path yet - show Save As dialog
+            if save_project():
+                root.destroy()
+            # If user cancelled save dialog or save failed, don't close
+    elif choice is False:  # Don't Save
+        root.destroy()
+    # else: choice is None (Cancel) - do nothing, stay open
 
 
 # =====================================================

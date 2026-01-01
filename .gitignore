@@ -12,10 +12,12 @@ test-v4.py
 test-v5.py  
 test-v6.py  
 test-v7.py  
-test-v8.py  
+test-v8.py
+test-v9.py  
 
 test2-v1.py
 test2-v2.py
+test2-v3.py
 
 FORMAT_WORBYN.xlsx
 FORMAT.xlsx
