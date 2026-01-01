@@ -9,6 +9,7 @@ from datetime import datetime
 import shutil
 from copy import copy
 import sys, os
+import json
 
 #================resolves path of files to be used with pyinstaller
 def resource_path(relative_path):
@@ -57,6 +58,8 @@ TEMPLATE_XLSX = resource_path("FORMAT_WORBYN.xlsx")
 zoom = 1.5
 balloon_no = 1
 balloons = []
+last_balloon_cache = {"zone": "", "char": "", "req": "", "tol": "", "equip": ""}
+current_project_path = None
 rendered_img = None
 rendered_zoom = None
 rendered_page_index = None
@@ -234,6 +237,96 @@ def requirement_popup(existing=None):
 
     result = {"action": None}
 
+    # Placeholder/cache helpers (only used for new balloons)
+    placeholder_state = {}
+
+    def set_placeholder(widget, text):
+        """Show grey placeholder text; mark widget as placeholder."""
+        placeholder_state[widget] = {
+            "placeholder": bool(text),
+            "text": text,
+            "pending_clear": False,
+        }
+        widget.delete(0, tk.END)
+        if text:
+            widget.insert(0, text)
+            _set_fg(widget, "gray")
+        else:
+            _set_fg(widget, "black")
+
+    def _set_fg(widget, color):
+        try:
+            widget.configure(foreground=color)
+        except Exception:
+            try:
+                widget.configure(fg=color)
+            except Exception:
+                pass
+
+    def ensure_state(widget):
+        return placeholder_state.get(widget)
+
+    def on_focus_in(event):
+        st = ensure_state(event.widget)
+        if not st:
+            return
+        # Keep placeholder visible on focus until user tabs to accept or types.
+        if st["placeholder"]:
+            _set_fg(event.widget, "gray")
+
+    def on_key_press(event):
+        st = ensure_state(event.widget)
+        if not st:
+            return
+        # Ignore control keys that shouldn't clear placeholders
+        if event.keysym in ("Tab", "Shift_L", "Shift_R", "Control_L", "Control_R", "Alt_L", "Alt_R", "Return"):
+            return
+        if st["placeholder"] or st["pending_clear"]:
+            event.widget.delete(0, tk.END)
+            st["placeholder"] = False
+            st["pending_clear"] = False
+            _set_fg(event.widget, "black")
+
+    def on_tab(event):
+        st = ensure_state(event.widget)
+        if not st:
+            return
+        if st["placeholder"]:
+            st["placeholder"] = False
+            st["pending_clear"] = False
+            _set_fg(event.widget, "black")
+        return "break"
+
+    def on_focus_out(event):
+        st = ensure_state(event.widget)
+        if not st:
+            return
+        if not event.widget.get().strip() and st["text"]:
+            set_placeholder(event.widget, st["text"])
+
+    def on_combobox_select(event):
+        st = ensure_state(event.widget)
+        if not st:
+            return
+        st["placeholder"] = False
+        st["pending_clear"] = False
+        _set_fg(event.widget, "black")
+
+    def bind_placeholder(widget, text):
+        set_placeholder(widget, text)
+        widget.bind("<FocusIn>", on_focus_in)
+        widget.bind("<KeyPress>", on_key_press)
+        widget.bind("<FocusOut>", on_focus_out)
+        widget.bind("<Tab>", on_tab)  # allow tabbing while accepting placeholder
+        if isinstance(widget, ttk.Combobox):
+            widget.bind("<<ComboboxSelected>>", on_combobox_select)
+
+    def get_value(widget):
+        st = ensure_state(widget)
+        if st and st["placeholder"]:
+            return ""
+        return widget.get().strip()
+
 
     tk.Label(popup, text="Zone").grid(row=0, column=0, padx=8, pady=5, sticky="e")
     tk.Label(popup, text="Characteristic Designator").grid(row=1, column=0, padx=8, pady=5, sticky="e")
@@ -343,12 +436,22 @@ def requirement_popup(existing=None):
     )
 
     if existing:
-        # print(existing)
         zone.insert(0, existing["zone"])
         char.insert(0, existing["char"])
         req.insert(0, existing["req"])
         tol.insert(0, existing["tol"])
         equip.insert(0, existing["equip"])
+        _set_fg(zone, "black")
+        _set_fg(char, "black")
+        _set_fg(req, "black")
+        _set_fg(tol, "black")
+        _set_fg(equip, "black")
+    else:
+        bind_placeholder(zone, last_balloon_cache.get("zone", ""))
+        bind_placeholder(char, last_balloon_cache.get("char", ""))
+        bind_placeholder(req, last_balloon_cache.get("req", ""))
+        bind_placeholder(tol, last_balloon_cache.get("tol", ""))
+        bind_placeholder(equip, last_balloon_cache.get("equip", ""))
 
     zone.grid(row=0, column=1, sticky="w")
     char.grid(row=1, column=1, padx=(0, 16))
@@ -358,23 +461,35 @@ def requirement_popup(existing=None):
 
     # moves the cursor to the input for ease of use
     zone.focus_set()
-    popup.after(50, lambda: char.select_range(0, tk.END))
 
     def save():
-        req_val = to_number(req.get().strip())
-        tol_val = to_number(tol.get().strip())
+        req_val_raw = get_value(req)
+        tol_val_raw = get_value(tol)
+        req_val = to_number(req_val_raw)
+        tol_val = to_number(tol_val_raw)
 
-        if not req.get().strip():
+        if not req_val_raw:
             messagebox.showwarning("Missing", "Requirement is mandatory")
             return
         result.update({
             "action": "save",
-            "zone": zone.get().strip(),
-            "char": char.get().strip(),
+            "zone": get_value(zone),
+            "char": get_value(char),
             "req": req_val,
             "tol": tol_val,
-            "equip": equip.get().strip()
+            "equip": get_value(equip)
         })
+        # Update cache on save for new balloons
+        if not existing:
+            def keep_or(old, new):
+                return new if new else old
+            last_balloon_cache.update({
+                "zone": keep_or(last_balloon_cache.get("zone", ""), result["zone"]),
+                "char": keep_or(last_balloon_cache.get("char", ""), result["char"]),
+                "req": keep_or(last_balloon_cache.get("req", ""), req_val_raw),
+                "tol": keep_or(last_balloon_cache.get("tol", ""), tol_val_raw),
+                "equip": keep_or(last_balloon_cache.get("equip", ""), result["equip"]),
+            })
         # print(f"char: {char.get().strip()}, req: {req_val}, tol: {tol_val}, pos: {pos_val}, equip: {equip.get().strip()} \n")
         popup.destroy()
 
@@ -744,6 +859,8 @@ def show_shortcuts():
 
     shortcuts = [
         ("Ctrl + O", "Open PDF"),
+        ("Ctrl + P", "Open Project (.fairy)"),
+        ("Ctrl + Shift + P", "Save Project (.fairy)"),
         ("Ctrl + S", "Save PDF"),
         ("Ctrl + Shift + S", "Save Report"),
         ("Escape", "Exit any Popup"),
@@ -795,7 +912,7 @@ def update_balloon_list():
     balloon_listbox.insert(tk.END, sep)
 
     for b in balloons:
-        if b["page"] == current_page_index:
+        if b["page"] == current_page_index:     
             balloon_listbox.insert(
                 tk.END,
                 f"{str(b['no']):<{w_no}} | "
@@ -991,8 +1108,302 @@ def save_report():
     except Exception:
         pass
 
+
+# =====================================================
+# SAVE PROJECT (.fairy)
+# =====================================================
+def save_project():
+    if not doc:
+        messagebox.showwarning("No File", "No file to save project")
+        return
+
+    if not balloons:
+        messagebox.showwarning("No data", "No balloons to save")
+        return
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
+    default_name = f"FAIR_Project_{timestamp}.fairy"
+
+    project_file = filedialog.asksaveasfilename(
+        title="Save Project As",
+        initialfile=default_name,
+        defaultextension=".fairy",
+        filetypes=[("FAIR Project files", "*.fairy"), ("All files", "*.*")]
+    )
+
+    if not project_file:
+        return
+
+    # Build project data structure
+    project_data = {
+        "version": 1,
+        "pdf": {
+            "path": PDF_IN,
+            "page_count": num_pages
+        },
+        "bubbles": []
+    }
+
+    # Deep copy balloons, excluding UI-only fields
+    for b in balloons:
+        bubble_data = {
+            "page": b["page"],
+            "no": b["no"],
+            "x": b["x"],
+            "y": b["y"],
+            "r": b["r"],
+            "zone": b["zone"],
+            "char": b["char"],
+            "req": b["req"],
+            "tol": b["tol"],
+            "equip": b["equip"]
+        }
+        # Include connector data if present
+        if b.get("start_x") is not None:
+            bubble_data["start_x"] = b["start_x"]
+        if b.get("start_y") is not None:
+            bubble_data["start_y"] = b["start_y"]
+        
+        project_data["bubbles"].append(bubble_data)
+
+    try:
+        with open(project_file, 'w') as f:
+            json.dump(project_data, f, indent=2)
+        
+        # Track current project for session persistence
+        global current_project_path
+        current_project_path = project_file
+        
+        messagebox.showinfo("Saved", f"Project saved successfully:\n{project_file}")
+    except Exception as e:
+        messagebox.showerror("Save Error", f"Failed to save project:\n{str(e)}")
+
+
+# =====================================================
+# LOAD PROJECT (.fairy)
+# =====================================================
+def load_project_from_path(project_file, show_success_msg=True, prompt_for_pdf=True):
+    """Core project loading logic (no file dialog). Returns True on success, False on failure."""
+    try:
+        with open(project_file, 'r') as f:
+            project_data = json.load(f)
+    except json.JSONDecodeError:
+        messagebox.showerror("Load Error", "Invalid project file: corrupted or not valid JSON")
+        return False
+    except Exception as e:
+        messagebox.showerror("Load Error", f"Failed to load project:\n{str(e)}")
+        return False
+
+    # Validate version
+    if project_data.get("version") != 1:
+        messagebox.showerror("Unsupported Version", 
+                            f"This project was created with version {project_data.get('version')}.\n"
+                            "Only version 1 is supported.")
+        return False
+
+    # Validate required keys
+    if "pdf" not in project_data or "bubbles" not in project_data:
+        messagebox.showerror("Invalid Project", "Project file is missing required data")
+        return False
+
+    pdf_info = project_data["pdf"]
+    if "path" not in pdf_info or "page_count" not in pdf_info:
+        messagebox.showerror("Invalid Project", "Project file is missing PDF information")
+        return False
+
+    # Handle PDF path
+    pdf_path = pdf_info["path"]
+    if not os.path.exists(pdf_path):
+        if not prompt_for_pdf:
+            return False
+        
+        response = messagebox.askokcancel(
+            "PDF Not Found",
+            f"Original PDF not found:\n{pdf_path}\n\nWould you like to locate it?"
+        )
+        if not response:
+            return False
+        
+        pdf_path = filedialog.askopenfilename(
+            title="Locate Original PDF",
+            filetypes=[("PDF files", "*.pdf")]
+        )
+        
+        if not pdf_path:
+            return False
+
+    # Close existing document if open
+    global doc, PDF_IN, num_pages, current_page_index, balloons, balloon_no
+    global zoom, offset_x, offset_y, page_cache, pending_start
+
+    if doc:
+        doc.close()
+
+    # Open the PDF
+    try:
+        doc = fitz.open(pdf_path)
+        PDF_IN = pdf_path
+        num_pages = len(doc)
+    except Exception as e:
+        messagebox.showerror("PDF Error", f"Failed to open PDF:\n{str(e)}")
+        doc = None
+        return False
+
+    # Validate page count matches
+    if num_pages != pdf_info["page_count"]:
+        messagebox.showwarning(
+            "Page Count Mismatch",
+            f"Warning: PDF has {num_pages} pages but project expected {pdf_info['page_count']}"
+        )
+
+    # Load bubbles
+    balloons.clear()
+    skipped_bubbles = []
+
+    for bubble_data in project_data["bubbles"]:
+        # Validate bubble has required fields
+        required_fields = ["page", "no", "x", "y", "r", "zone", "char", "req", "tol", "equip"]
+        if not all(field in bubble_data for field in required_fields):
+            skipped_bubbles.append(f"Bubble {bubble_data.get('no', '?')} - missing fields")
+            continue
+
+        # Skip bubbles referencing invalid pages
+        if bubble_data["page"] >= num_pages or bubble_data["page"] < 0:
+            skipped_bubbles.append(f"Bubble {bubble_data['no']} - invalid page {bubble_data['page']}")
+            continue
+
+        # Create bubble with all data
+        bubble = {
+            "page": bubble_data["page"],
+            "no": bubble_data["no"],
+            "x": bubble_data["x"],
+            "y": bubble_data["y"],
+            "r": bubble_data["r"],
+            "zone": bubble_data["zone"],
+            "char": bubble_data["char"],
+            "req": bubble_data["req"],
+            "tol": bubble_data["tol"],
+            "equip": bubble_data["equip"],
+            "highlight": False,  # UI state not saved
+            "start_x": bubble_data.get("start_x"),
+            "start_y": bubble_data.get("start_y")
+        }
+        balloons.append(bubble)
+
+    # Recalculate balloon number
+    balloon_no = len(balloons) + 1
+
+    # Reset session state
+    current_page_index = 0
+    zoom = 1.5
+    offset_x = offset_y = 0
+    page_cache.clear()
+    pending_start = None
+
+    # Render the first page
+    render(force=True)
+    update_two_point_ui()
+
+    # Show warnings if any bubbles were skipped
+    if show_success_msg:
+        if skipped_bubbles:
+            messagebox.showwarning(
+                "Load Warning",
+                f"Project loaded, but {len(skipped_bubbles)} bubble(s) were skipped:\n\n" +
+                "\n".join(skipped_bubbles[:5]) +
+                (f"\n... and {len(skipped_bubbles) - 5} more" if len(skipped_bubbles) > 5 else "")
+            )
+        else:
+            messagebox.showinfo("Loaded", f"Project loaded successfully:\n{len(balloons)} bubble(s) restored")
+    
+    return True
+
+
+def load_project():
+    """Open project with file dialog."""
+    project_file = filedialog.askopenfilename(
+        title="Open Project",
+        filetypes=[("FAIR Project files", "*.fairy"), ("All files", "*.*")]
+    )
+
+    if not project_file:
+        return
+    
+    load_project_from_path(project_file)
+
+
+# =====================================================
+# STATE MANAGEMENT (AppData persistence)
+# =====================================================
+def get_state_path():
+    """Return path to app state file in AppData."""
+    app_dir = os.path.join(os.environ.get("APPDATA", ""), "FAIR-y")
+    os.makedirs(app_dir, exist_ok=True)
+    return os.path.join(app_dir, "state.json")
+
+def load_app_state():
+    """Load app state from AppData. Returns empty dict if missing."""
+    path = get_state_path()
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, "r") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_app_state(state):
+    """Save app state to AppData."""
+    try:
+        with open(get_state_path(), "w") as f:
+            json.dump(state, f, indent=2)
+    except Exception:
+        pass  # Silent fail - state is non-critical
+
+
+def auto_restore_last_project():
+    """Attempt to restore last project on startup. Fails silently."""
+    state = load_app_state()
+    last_project = state.get("last_project")
+    
+    if not last_project:
+        return
+    
+    if not os.path.exists(last_project):
+        # Silently skip - file moved/deleted
+        return
+    
+    try:
+        # Read project file to check PDF exists
+        with open(last_project, 'r') as f:
+            project_data = json.load(f)
+        
+        # Check PDF exists
+        pdf_path = project_data.get("pdf", {}).get("path")
+        if not pdf_path or not os.path.exists(pdf_path):
+            messagebox.showinfo(
+                "Session Restore",
+                f"Could not restore last session:\nPDF file not found.\n\nStarting fresh.",
+                parent=root
+            )
+            return
+        
+        # Use internal load logic without prompts
+        load_project_from_path(last_project, show_success_msg=False, prompt_for_pdf=False)
+        
+    except Exception:
+        # Silent fail - corrupt file or other error
+        pass
+
+
 #===========handles quitting of app to safely quit without losing information===========
 def on_app_close():
+    # Save current session state
+    if current_project_path:
+        state = {"last_project": current_project_path}
+        save_app_state(state)
+    
+    # Existing unsaved warning logic
     if balloons:
         msg = "You have unsaved balloons.\n\nAre you sure you want to exit?"
     else:
@@ -1033,12 +1444,14 @@ toolbar.pack(fill="x", padx=5)
 #=======================================================
 # UI Button Binds
 #=======================================================
-tk.Button(toolbar, text="Open PDF", command=open_pdf).pack(side="left", padx=(0,5))
+tk.Button(toolbar, text="Open PDF", command=open_pdf).pack(side="left")
+tk.Button(toolbar, text="Open Project", command=load_project).pack(side="left", padx=(0,5))
 tk.Button(toolbar, text="Prev Page", command=prev_page).pack(side="left")
 tk.Button(toolbar, text="Next Page", command=next_page).pack(side="left", padx=(0,5))
 tk.Button(toolbar, text="Undo balloon", command=undo).pack(side="left", padx=(0,5))
 tk.Button(toolbar, text="Save PDF", command=save_pdf).pack(side="left")
-tk.Button(toolbar, text="Save Report", command=save_report).pack(side="left", padx=(0,5))
+tk.Button(toolbar, text="Save Report", command=save_report).pack(side="left")
+tk.Button(toolbar, text="Save Project", command=save_project).pack(side="left", padx=(0,5))
 tk.Button(toolbar, text="Help", command=show_shortcuts).pack(side="left")
 
 def render_two_point_preview():
@@ -1071,6 +1484,10 @@ def render_two_point_preview():
 #=======================================================
 root.bind("<Control-O>", lambda e: open_pdf())
 root.bind("<Control-o>", lambda e: open_pdf())
+root.bind("<Control-P>", lambda e: load_project())
+root.bind("<Control-p>", lambda e: load_project())
+root.bind("<Control-Shift-P>", lambda e: save_project())
+root.bind("<Control-Shift-p>", lambda e: save_project())
 root.bind("<Control-S>", lambda e: save_pdf())
 root.bind("<Control-s>", lambda e: save_pdf())
 root.bind("<Control-Shift-S>", lambda e: save_report())
@@ -1181,6 +1598,9 @@ canvas.bind("<Button-1>", start_pan)
 canvas.bind("<B1-Motion>", do_pan)
 canvas.bind("<ButtonRelease-1>", end_pan)
 canvas.bind("<MouseWheel>", zoom_canvas)
+
+# Auto-restore last session
+root.after(100, auto_restore_last_project)
 
 render()
 root.mainloop()

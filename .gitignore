@@ -4,3 +4,15 @@ dist/
 __pycache__/
 *.py[cod]
 *.spec
+
+test-v1.py
+test-v2.py  
+test-v3.py  
+test-v4.py  
+test-v5.py  
+test-v6.py  
+test-v7.py  
+test-v8.py  
+
+test2-v1.py
+test2-v2.py
