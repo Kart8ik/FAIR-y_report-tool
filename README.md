@@ -4,7 +4,7 @@ Professional desktop tool for placing numbered balloons on PDF engineering drawi
 
 ### Core Features
 
-#### 📄 PDF Annotation
+#### PDF Annotation
 - Load multi-page engineering drawings with smooth cached rendering
 - Place numbered balloons via right-click with immediate visual feedback
 - Two-point mode: draw connector lines from detail to balloon
@@ -12,14 +12,14 @@ Professional desktop tool for placing numbered balloons on PDF engineering drawi
 - Undo last balloon on current page (Ctrl+Z)
 - Navigate pages with arrow keys or toolbar buttons
 
-#### 📝 Data Entry
+#### Data Entry
 - Rich dropdown lists for characteristic designators and equipment types
 - Capture: Characteristic, Requirement, -Tolerance, +Tolerance, Equipment
 - Smart placeholder system: remembers your last entries across balloons
 - Gray placeholders auto-fill, press Tab to accept or type to replace
 - Speeds up repetitive data entry significantly
 
-#### 💾 Project Management (NEW)
+#### Project Management (NEW)
 - **Save/Load Projects**: Work saved as `.fairy` files (JSON format)
 - **Session Persistence**: Automatically reopens your last saved project on startup
 - **Smart Close Dialog**: Warns about unsaved changes with 3 options:
@@ -29,7 +29,7 @@ Professional desktop tool for placing numbered balloons on PDF engineering drawi
 - **Dirty State Tracking**: Only warns when actual project data changes (not PDF/Report exports)
 - **Missing PDF Recovery**: If project's PDF is moved, prompts to locate it
 
-#### 📤 Export Options
+#### Export Options
 - **Bubbled PDF**: Original drawing with overlaid balloons and connectors
 - **FAIR Report**: Auto-generated Excel using `FORMAT.xlsx` template
   - Dynamically inserts rows for any number of balloons
