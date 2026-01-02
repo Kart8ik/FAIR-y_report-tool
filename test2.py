@@ -1139,12 +1139,12 @@ def save_project_to_path(project_file):
             "path": PDF_IN,
             "page_count": num_pages
         },
-        "bubbles": []
+        "balloons": []
     }
 
     # Deep copy balloons, excluding UI-only fields
     for b in balloons:
-        bubble_data = {
+        balloon_data = {
             "page": b["page"],
             "no": b["no"],
             "x": b["x"],
@@ -1158,11 +1158,11 @@ def save_project_to_path(project_file):
         }
         # Include connector data if present
         if b.get("start_x") is not None:
-            bubble_data["start_x"] = b["start_x"]
+            balloon_data["start_x"] = b["start_x"]
         if b.get("start_y") is not None:
-            bubble_data["start_y"] = b["start_y"]
+            balloon_data["start_y"] = b["start_y"]
         
-        project_data["bubbles"].append(bubble_data)
+        project_data["balloons"].append(balloon_data)
 
     try:
         with open(project_file, 'w') as f:
@@ -1235,7 +1235,7 @@ def load_project_from_path(project_file, show_success_msg=True, prompt_for_pdf=T
         return False
 
     # Validate required keys
-    if "pdf" not in project_data or "bubbles" not in project_data:
+    if "pdf" not in project_data or "balloons" not in project_data:
         messagebox.showerror("Invalid Project", "Project file is missing required data")
         return False
 
@@ -1289,39 +1289,39 @@ def load_project_from_path(project_file, show_success_msg=True, prompt_for_pdf=T
             f"Warning: PDF has {num_pages} pages but project expected {pdf_info['page_count']}"
         )
 
-    # Load bubbles
+    # Load balloons
     balloons.clear()
-    skipped_bubbles = []
+    skipped_balloons = []
 
-    for bubble_data in project_data["bubbles"]:
-        # Validate bubble has required fields
+    for balloon_data in project_data["balloons"]:
+        # Validate balloon has required fields
         required_fields = ["page", "no", "x", "y", "r", "zone", "char", "req", "tol", "equip"]
-        if not all(field in bubble_data for field in required_fields):
-            skipped_bubbles.append(f"Bubble {bubble_data.get('no', '?')} - missing fields")
+        if not all(field in balloon_data for field in required_fields):
+            skipped_balloons.append(f"balloon {balloon_data.get('no', '?')} - missing fields")
             continue
 
-        # Skip bubbles referencing invalid pages
-        if bubble_data["page"] >= num_pages or bubble_data["page"] < 0:
-            skipped_bubbles.append(f"Bubble {bubble_data['no']} - invalid page {bubble_data['page']}")
+        # Skip balloons referencing invalid pages
+        if balloon_data["page"] >= num_pages or balloon_data["page"] < 0:
+            skipped_balloons.append(f"balloon {balloon_data['no']} - invalid page {balloon_data['page']}")
             continue
 
-        # Create bubble with all data
-        bubble = {
-            "page": bubble_data["page"],
-            "no": bubble_data["no"],
-            "x": bubble_data["x"],
-            "y": bubble_data["y"],
-            "r": bubble_data["r"],
-            "zone": bubble_data["zone"],
-            "char": bubble_data["char"],
-            "req": bubble_data["req"],
-            "tol": bubble_data["tol"],
-            "equip": bubble_data["equip"],
+        # Create balloon with all data
+        balloon = {
+            "page": balloon_data["page"],
+            "no": balloon_data["no"],
+            "x": balloon_data["x"],
+            "y": balloon_data["y"],
+            "r": balloon_data["r"],
+            "zone": balloon_data["zone"],
+            "char": balloon_data["char"],
+            "req": balloon_data["req"],
+            "tol": balloon_data["tol"],
+            "equip": balloon_data["equip"],
             "highlight": False,  # UI state not saved
-            "start_x": bubble_data.get("start_x"),
-            "start_y": bubble_data.get("start_y")
+            "start_x": balloon_data.get("start_x"),
+            "start_y": balloon_data.get("start_y")
         }
-        balloons.append(bubble)
+        balloons.append(balloon)
 
     # Recalculate balloon number
     balloon_no = len(balloons) + 1
@@ -1340,17 +1340,17 @@ def load_project_from_path(project_file, show_success_msg=True, prompt_for_pdf=T
     # Mark project as clean after successful load
     project_dirty = False
 
-    # Show warnings if any bubbles were skipped
+    # Show warnings if any balloons were skipped
     if show_success_msg:
-        if skipped_bubbles:
+        if skipped_balloons:
             messagebox.showwarning(
                 "Load Warning",
-                f"Project loaded, but {len(skipped_bubbles)} bubble(s) were skipped:\n\n" +
-                "\n".join(skipped_bubbles[:5]) +
-                (f"\n... and {len(skipped_bubbles) - 5} more" if len(skipped_bubbles) > 5 else "")
+                f"Project loaded, but {len(skipped_balloons)} balloon(s) were skipped:\n\n" +
+                "\n".join(skipped_balloons[:5]) +
+                (f"\n... and {len(skipped_balloons) - 5} more" if len(skipped_balloons) > 5 else "")
             )
         else:
-            messagebox.showinfo("Loaded", f"Project loaded successfully:\n{len(balloons)} bubble(s) restored")
+            messagebox.showinfo("Loaded", f"Project loaded successfully:\n{len(balloons)} balloon(s) restored")
     
     return True
 
@@ -1434,7 +1434,7 @@ def auto_restore_last_project():
 
 #===========handles quitting of app to safely quit without losing information===========
 def on_app_close():
-    
+
     # Check for unsaved changes
     if not project_dirty:
         root.destroy()
