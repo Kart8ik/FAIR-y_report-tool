@@ -504,6 +504,9 @@ def requirement_popup(existing=None):
             popup.destroy()
 
     if not existing:
+        tk.Label(popup, text="Press TAB to autofill", fg="gray").grid(
+            row=5, column=0, columnspan=2, sticky="w", padx=(20, 0)
+        )
         tk.Button(popup, text="Save", width=10, command=save).grid(
             row=5, column=1, padx=(0, 20), pady=8, sticky="e"
         )
