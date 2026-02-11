@@ -1,4 +1,4 @@
-from typing import ValuesView
+from turtle import color
 import fitz
 import tkinter as tk
 from tkinter import messagebox, filedialog, ttk
@@ -11,7 +11,6 @@ from copy import copy
 import sys, os
 import json
 
-#================resolves path of files to be used with pyinstaller
 def resource_path(relative_path):
     try:
         base_path = sys._MEIPASS   # PyInstaller temp dir
@@ -52,7 +51,7 @@ doc = None
 num_pages = 0
 current_page_index = 0
 current_page = None  # set after a PDF is opened via open_pdf()
-TEMPLATE_XLSX = resource_path("FORMAT_WORBYN.xlsx")
+TEMPLATE_XLSX = resource_path("FORMAT.xlsx")
 
 # ================= STATE =================
 zoom = 1.5
@@ -225,6 +224,10 @@ def open_pdf():
 # =====================================================
 # POPUP (Requirement / Tolerance)
 # =====================================================
+
+def safe_insert(entry, value): #function to ensure values are stored safely in string form only
+    entry.insert(0, "" if value is None else str(value))
+
 def requirement_popup(existing=None):
     if not doc:
         messagebox.showwarning("No File", "Open file to work on")
@@ -443,6 +446,7 @@ def requirement_popup(existing=None):
     )
 
     if existing:
+        # print(existing)
         zone.insert(0, existing["zone"])
         char.insert(0, existing["char"])
         req.insert(0, existing["req"])
@@ -472,6 +476,7 @@ def requirement_popup(existing=None):
 
     # moves the cursor to the input for ease of use
     zone.focus_set()
+    popup.after(50, lambda: zone.select_range(0, tk.END))
 
     def save():
         req_val_raw = get_value(req)
@@ -505,7 +510,7 @@ def requirement_popup(existing=None):
                 "pos": keep_or(last_balloon_cache.get("pos", ""), pos_val_raw),
                 "equip": keep_or(last_balloon_cache.get("equip", ""), result["equip"]),
             })
-        # print(f"char: {char.get().strip()}, req: {req_val}, tol: {tol_val}, pos: {pos_val}, equip: {equip.get().strip()} \n")
+        # print(f"char: {char.get().strip()}, req: {req_val}, neg: {neg_val}, pos: {pos_val}, equip: {equip.get().strip()} \n")
         popup.destroy()
 
     def delete():
@@ -530,7 +535,6 @@ def requirement_popup(existing=None):
         )
 
     # key binds for ease of use
-
     zone.bind("<Return>", lambda e: char.focus_set())
     zone.bind("<Down>", lambda e: char.focus_set())
 
@@ -664,9 +668,7 @@ def delete_balloon(balloon):
     render(force=True)
 
 
-# =====================================================
-# highlights balloon when selected to edit 
-# =====================================================
+
 def highlight_balloon(balloon, duration=2000):
 
     balloon["highlight"] = True
@@ -929,7 +931,7 @@ def show_shortcuts():
 # =====================================================
 def update_balloon_list():
     # Fixed column widths for neat alignment in the list view
-    w_no, w_zone, w_char, w_req, w_tol, w_equip = 3, 6, 28, 8, 6, 22
+    w_no, w_zone, w_char, w_req, w_tol, w_min_max, w_equip = 3, 6, 28, 8, 6, 8, 22
     header = (
         f"{'No':<{w_no}} | "
         f"{'Zone':<{w_zone}} | "
@@ -937,8 +939,8 @@ def update_balloon_list():
         f"{'Req':<{w_req}} | "
         f"{'-Tol':<{w_tol}} | "
         f"{'+Tol':<{w_tol}} | "
-        f"{'Low':<{w_tol}} | "
-        f"{'Up':<{w_tol}} | "
+        f"{'Min':<{w_min_max}} | "
+        f"{'Max':<{w_min_max}} | "
         f"{'Equip':<{w_equip}}"
     )
     sep = "-" * len(header)
@@ -948,7 +950,9 @@ def update_balloon_list():
     balloon_listbox.insert(tk.END, sep)
 
     for b in balloons:
-        if b["page"] == current_page_index:     
+        if b["page"] == current_page_index:
+            min_val = round(to_number_list_item(b['req']) - to_number_list_item(b['neg']), 2)
+            max_val = round(to_number_list_item(b['req']) + to_number_list_item(b['pos']), 2)
             balloon_listbox.insert(
                 tk.END,
                 f"{str(b['no']):<{w_no}} | "
@@ -957,13 +961,13 @@ def update_balloon_list():
                 f"{str(b['req']):<{w_req}} | "
                 f"{str(b['neg']):<{w_tol}} | "
                 f"{str(b['pos']):<{w_tol}} | "
-                f"{str(round(to_number_list_item(b['req']) - to_number_list_item(b['neg']), 2)):<{w_tol}} | "
-                f"{str(round(to_number_list_item(b['req']) + to_number_list_item(b['pos']), 2)):<{w_tol}} | "
+                f"{str(min_val):<{w_min_max}} | "
+                f"{str(max_val):<{w_min_max}} | "
                 f"{str(b['equip']):<{w_equip}}"
             )
 
 # =====================================================
-# SAVE BALLOONED PDF
+# SAVE balloonD PDF
 # =====================================================
 def save_pdf():
     if not doc:
@@ -1036,7 +1040,7 @@ def save_pdf():
 
 
 # =====================================================
-# SAVE REPORT
+# SAVE REPORT (UNCHANGED)
 # =====================================================
 def save_report():
     if not doc:
@@ -1066,14 +1070,14 @@ def save_report():
 
     # The template has 15 data rows (8-22). Row 23 participates in the merged
     # Legends block (A23:B24, C23:M24), so we must insert before that at row 23.
-    START_ROW = 12
-    TEMPLATE_ROWS = 42
+    START_ROW = 8
+    TEMPLATE_ROWS = 15
     LAST_TEMPLATE_ROW = START_ROW + TEMPLATE_ROWS - 1  # 22
     INSERT_AT = LAST_TEMPLATE_ROW + 1                  # 23 (just before merged legends)
     template_row_idx = LAST_TEMPLATE_ROW
-    footer_rows = {55: ws.row_dimensions[55].height,
-                   56: ws.row_dimensions[56].height,
-                   57: ws.row_dimensions[57].height}
+    footer_rows = {24: ws.row_dimensions[24].height,
+                   25: ws.row_dimensions[25].height,
+                   26: ws.row_dimensions[26].height}
 
     def copy_row_style(src_row_idx, dest_row_idx, clear_values=True):
         # Copy styles across all columns to preserve borders/alignment
@@ -1100,8 +1104,9 @@ def save_report():
         # Re-merge the footer block (Legends/Observations/Sign-off) so it
         # stays intact after the shift, and restore footer row heights.
         footer_merges = [
-            "A55:C55", "D55:L55",
-            "G56:H56","I56:L56",
+            "A24:B24", "C24:M24",
+            "D25:M25",
+            "A26:B26", "C26:D26", "E26:F26", "G26:H26", "I26:J26", "K26:M26",
         ]
         for rng in footer_merges:
             if rng in ws.merged_cells:
@@ -1127,8 +1132,8 @@ def save_report():
     row = START_ROW
     for b in balloons:
         ws.cell(row=row, column=1).value = b["page"] + 1
-        ws.cell(row=row, column=2).value = b["no"]
-        ws.cell(row=row, column=3).value = b["zone"]
+        ws.cell(row=row, column=2).value = b["zone"]
+        ws.cell(row=row, column=3).value = b["no"]
         ws.cell(row=row, column=4).value = b['char']
         ws.cell(row=row, column=5).value = b["req"]
         ws.cell(row=row, column=6).value = b["neg"]
@@ -1197,6 +1202,7 @@ def save_project_to_path(project_file):
         current_project_path = project_file
         project_dirty = False
 
+        # Save state immediately
         state = {"last_project": project_file}
         save_app_state(state)
 
@@ -1321,12 +1327,12 @@ def load_project_from_path(project_file, show_success_msg=True, prompt_for_pdf=T
         # Validate balloon has required fields
         required_fields = ["page", "no", "x", "y", "r", "zone", "char", "req", "neg", "pos", "equip"]
         if not all(field in balloon_data for field in required_fields):
-            skipped_balloons.append(f"balloon {balloon_data.get('no', '?')} - missing fields")
+            skipped_balloons.append(f"Balloon {balloon_data.get('no', '?')} - missing fields")
             continue
 
         # Skip balloons referencing invalid pages
         if balloon_data["page"] >= num_pages or balloon_data["page"] < 0:
-            skipped_balloons.append(f"balloon {balloon_data['no']} - invalid page {balloon_data['page']}")
+            skipped_balloons.append(f"Balloon {balloon_data['no']} - invalid page {balloon_data['page']}")
             continue
 
         # Create balloon with all data
@@ -1457,9 +1463,7 @@ def auto_restore_last_project():
         pass
 
 
-#===========handles quitting of app to safely quit without losing information===========
 def on_app_close():
-
     # Check for unsaved changes
     if not project_dirty:
         root.destroy()

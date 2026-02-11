@@ -34,6 +34,14 @@ def to_number(value):
     except ValueError:
         return value
 
+def to_number_list_item(value):
+    if isinstance(value, (int, float)):
+        return value
+    try:
+        return int(value) if value.isdigit() else float(value)
+    except ValueError:
+        return 0
+
 
 
 # ================= FILES =================
@@ -49,7 +57,7 @@ TEMPLATE_XLSX = resource_path("FORMAT.xlsx")
 zoom = 1.5
 balloon_no = 1
 balloons = []
-last_balloon_cache = {"char": "", "req": "", "neg": "", "pos": "", "equip": ""}
+last_balloon_cache = {"zone": "", "char": "", "req": "", "neg": "", "pos": "", "equip": ""}
 current_project_path = None
 project_dirty = False
 rendered_img = None
@@ -328,11 +336,14 @@ def requirement_popup(existing=None):
         return widget.get().strip()
 
 
-    tk.Label(popup, text="Characteristic Designator").grid(row=0, column=0, padx=8, pady=5, sticky="e")
-    tk.Label(popup, text="Requirement").grid(row=1, column=0, padx=8, pady=5, sticky="e")
-    tk.Label(popup, text="- Tol").grid(row=2, column=0, padx=8, pady=5, sticky="e")
-    tk.Label(popup, text="+ Tol").grid(row=3, column=0, padx=8, pady=5, sticky="e")
-    tk.Label(popup, text="Equipment Used").grid(row=4, column=0, padx=8, pady=5, sticky="e")
+    tk.Label(popup, text="Zone").grid(row=0, column=0, padx=8, pady=5, sticky="e")
+    tk.Label(popup, text="Characteristic Designator").grid(row=1, column=0, padx=8, pady=5, sticky="e")
+    tk.Label(popup, text="Requirement").grid(row=2, column=0, padx=8, pady=5, sticky="e")
+    tk.Label(popup, text="- Tol").grid(row=3, column=0, padx=8, pady=5, sticky="e")
+    tk.Label(popup, text="+ Tol").grid(row=4, column=0, padx=8, pady=5, sticky="e")
+    tk.Label(popup, text="Equipment Used").grid(row=5, column=0, padx=8, pady=5, sticky="e")
+
+    zone = tk.Entry(popup, validate="key")
 
     char = ttk.Combobox(
         popup,
@@ -436,32 +447,36 @@ def requirement_popup(existing=None):
 
     if existing:
         # print(existing)
+        zone.insert(0, existing["zone"])
         char.insert(0, existing["char"])
         req.insert(0, existing["req"])
         neg.insert(0, existing["neg"])
         pos.insert(0, existing["pos"])
         equip.insert(0, existing["equip"])
+        _set_fg(zone, "black")
         _set_fg(char, "black")
         _set_fg(req, "black")
         _set_fg(neg, "black")
         _set_fg(pos, "black")
         _set_fg(equip, "black")
     else:
+        bind_placeholder(zone, last_balloon_cache.get("zone", ""))
         bind_placeholder(char, last_balloon_cache.get("char", ""))
         bind_placeholder(req, last_balloon_cache.get("req", ""))
         bind_placeholder(neg, last_balloon_cache.get("neg", ""))
         bind_placeholder(pos, last_balloon_cache.get("pos", ""))
         bind_placeholder(equip, last_balloon_cache.get("equip", ""))
 
-    char.grid(row=0, column=1, padx=(0, 16))
-    req.grid(row=1, column=1, sticky="w")
-    neg.grid(row=2, column=1, sticky="w")
-    pos.grid(row=3, column=1, sticky="w")
-    equip.grid(row=4, column=1, sticky="w")
+    zone.grid(row=0, column=1, sticky="w")
+    char.grid(row=1, column=1, padx=(0, 16))
+    req.grid(row=2, column=1, sticky="w")
+    neg.grid(row=3, column=1, sticky="w")
+    pos.grid(row=4, column=1, sticky="w")
+    equip.grid(row=5, column=1, sticky="w")
 
     # moves the cursor to the input for ease of use
-    char.focus_set()
-    popup.after(50, lambda: char.select_range(0, tk.END))
+    zone.focus_set()
+    popup.after(50, lambda: zone.select_range(0, tk.END))
 
     def save():
         req_val_raw = get_value(req)
@@ -476,6 +491,7 @@ def requirement_popup(existing=None):
             return
         result.update({
             "action": "save",
+            "zone": get_value(zone),
             "char": get_value(char),
             "req": req_val,
             "neg": neg_val,
@@ -487,6 +503,7 @@ def requirement_popup(existing=None):
             def keep_or(old, new):
                 return new if new else old
             last_balloon_cache.update({
+                "zone": keep_or(last_balloon_cache.get("zone", ""), result["zone"]),
                 "char": keep_or(last_balloon_cache.get("char", ""), result["char"]),
                 "req": keep_or(last_balloon_cache.get("req", ""), req_val_raw),
                 "neg": keep_or(last_balloon_cache.get("neg", ""), neg_val_raw),
@@ -503,22 +520,26 @@ def requirement_popup(existing=None):
 
     if not existing:
         tk.Label(popup, text="Press TAB to autofill", fg="gray").grid(
-            row=5, column=0, columnspan=2, sticky="w", padx=(20, 0)
+            row=6, column=0, columnspan=2, sticky="w", padx=(20, 0)
         )
         tk.Button(popup, text="Save", width=10, command=save).grid(
-            row=5, column=1, padx=(0, 20), pady=8, sticky="e"
+            row=6, column=1, padx=(0, 20), pady=8, sticky="e"
         )
 
     if existing:
         tk.Button(popup, text="Save", width=10, command=save).grid(
-            row=5, column=0, padx=(20, 0), pady=8, sticky="w"
+            row=6, column=0, padx=(20, 0), pady=8, sticky="w"
         )
         tk.Button(popup, text="Delete", width=10, fg="red", command=delete).grid(
-            row=5, column=1, padx=(0, 20), pady=8, sticky="e"
+            row=6, column=1, padx=(0, 20), pady=8, sticky="e"
         )
 
     # key binds for ease of use
+    zone.bind("<Return>", lambda e: char.focus_set())
+    zone.bind("<Down>", lambda e: char.focus_set())
+
     char.bind("<Return>", lambda e: req.focus_set())
+    char.bind("<Up>", lambda e: zone.focus_set())
 
     req.bind("<Return>", lambda e: neg.focus_set())
     req.bind("<Up>", lambda e: char.focus_set())
@@ -590,6 +611,7 @@ def add_balloon(event):
         "x": pdf_x,
         "y": pdf_y,
         "r": balloon_radius_slider.get(),
+        "zone": "",
         "char": "",
         "req": "",
         "neg": "",
@@ -607,6 +629,7 @@ def add_balloon(event):
 
     # requirement_popup returns {"action": "save"|"delete"|None, ...}
     if data.get("action") == "save":
+        balloons[-1]["zone"] = data["zone"]
         balloons[-1]["char"] = data["char"]
         balloons[-1]["req"]  = data["req"]
         balloons[-1]["neg"]  = data["neg"]
@@ -667,6 +690,7 @@ def on_balloon_edit(balloon):
     result = requirement_popup(existing=balloon)
 
     if result["action"] == "save":
+        balloon["zone"] = result["zone"]
         balloon["char"] = result["char"]
         balloon["req"]  = result["req"]
         balloon["neg"]  = result["neg"]
@@ -907,13 +931,16 @@ def show_shortcuts():
 # =====================================================
 def update_balloon_list():
     # Fixed column widths for neat alignment in the list view
-    w_no, w_char, w_req, w_tol, w_equip = 3, 28, 8, 6, 22
+    w_no, w_zone, w_char, w_req, w_tol, w_min_max, w_equip = 3, 6, 28, 8, 6, 8, 22
     header = (
         f"{'No':<{w_no}} | "
+        f"{'Zone':<{w_zone}} | "
         f"{'Char':<{w_char}} | "
         f"{'Req':<{w_req}} | "
         f"{'-Tol':<{w_tol}} | "
         f"{'+Tol':<{w_tol}} | "
+        f"{'Min':<{w_min_max}} | "
+        f"{'Max':<{w_min_max}} | "
         f"{'Equip':<{w_equip}}"
     )
     sep = "-" * len(header)
@@ -924,13 +951,18 @@ def update_balloon_list():
 
     for b in balloons:
         if b["page"] == current_page_index:
+            min_val = round(to_number_list_item(b['req']) - to_number_list_item(b['neg']), 2)
+            max_val = round(to_number_list_item(b['req']) + to_number_list_item(b['pos']), 2)
             balloon_listbox.insert(
                 tk.END,
                 f"{str(b['no']):<{w_no}} | "
+                f"{str(b['zone']):<{w_zone}} | "
                 f"{str(b['char']):<{w_char}} | "
                 f"{str(b['req']):<{w_req}} | "
                 f"{str(b['neg']):<{w_tol}} | "
                 f"{str(b['pos']):<{w_tol}} | "
+                f"{str(min_val):<{w_min_max}} | "
+                f"{str(max_val):<{w_min_max}} | "
                 f"{str(b['equip']):<{w_equip}}"
             )
 
@@ -1072,9 +1104,9 @@ def save_report():
         # Re-merge the footer block (Legends/Observations/Sign-off) so it
         # stays intact after the shift, and restore footer row heights.
         footer_merges = [
-            "A24:B24", "C24:M24",
-            "D25:M25",
-            "A26:B26", "C26:D26", "E26:F26", "G26:H26", "I26:J26", "K26:M26",
+            "A24:C24", "D24:P24",
+            "A25:C25","D25:P25",
+            "A26:C26", "D26:E26", "F26:I26", "J26:K26", "L26:M26", "N26:P26",
         ]
         for rng in footer_merges:
             if rng in ws.merged_cells:
@@ -1100,12 +1132,15 @@ def save_report():
     row = START_ROW
     for b in balloons:
         ws.cell(row=row, column=1).value = b["page"] + 1
-        ws.cell(row=row, column=2).value = b["no"]
-        ws.cell(row=row, column=3).value = b['char']
-        ws.cell(row=row, column=4).value = b["req"]
-        ws.cell(row=row, column=5).value = b["neg"]
-        ws.cell(row=row, column=6).value = b["pos"]
-        ws.cell(row=row, column=7).value = b["equip"]
+        ws.cell(row=row, column=2).value = b["zone"]
+        ws.cell(row=row, column=3).value = b["no"]
+        ws.cell(row=row, column=4).value = b['char']
+        ws.cell(row=row, column=5).value = b["req"]
+        ws.cell(row=row, column=6).value = b["neg"]
+        ws.cell(row=row, column=7).value = b["pos"]
+        ws.cell(row=row, column=8).value = round(to_number_list_item(b['req']) - to_number_list_item(b['neg']), 2)
+        ws.cell(row=row, column=9).value = round(to_number_list_item(b['req']) + to_number_list_item(b['pos']), 2)
+        ws.cell(row=row, column=10).value = b["equip"]
         row += 1
 
     wb.save(report_file)
@@ -1143,6 +1178,7 @@ def save_project_to_path(project_file):
             "x": b["x"],
             "y": b["y"],
             "r": b["r"],
+            "zone": b["zone"],
             "char": b["char"],
             "req": b["req"],
             "neg": b["neg"],
@@ -1289,7 +1325,7 @@ def load_project_from_path(project_file, show_success_msg=True, prompt_for_pdf=T
 
     for balloon_data in project_data["balloons"]:
         # Validate balloon has required fields
-        required_fields = ["page", "no", "x", "y", "r", "char", "req", "neg", "pos", "equip"]
+        required_fields = ["page", "no", "x", "y", "r", "zone", "char", "req", "neg", "pos", "equip"]
         if not all(field in balloon_data for field in required_fields):
             skipped_balloons.append(f"Balloon {balloon_data.get('no', '?')} - missing fields")
             continue
@@ -1306,6 +1342,7 @@ def load_project_from_path(project_file, show_success_msg=True, prompt_for_pdf=T
             "x": balloon_data["x"],
             "y": balloon_data["y"],
             "r": balloon_data["r"],
+            "zone": balloon_data["zone"],
             "char": balloon_data["char"],
             "req": balloon_data["req"],
             "neg": balloon_data["neg"],
