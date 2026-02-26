@@ -13,15 +13,21 @@ test-v5.py
 test-v6.py  
 test-v7.py  
 test-v8.py
-test-v9.py  
+test-v9.py
+test-v10.py
+test-v11.py
+test-v12.py
 
 test2-v1.py
 test2-v2.py
 test2-v3.py
+test2-v4.py
+test2-v5.py
 
 FORMAT_WORBYN.xlsx
 FORMAT.xlsx
 FORMAT_WORBYN_2.xlsx
+Characteristic-Designator.xlsx
 
 stress_test_output/
 sample.pdf

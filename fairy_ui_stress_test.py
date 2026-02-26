@@ -77,6 +77,14 @@ CLOSE_TIMEOUT = 5
 # ADD_BUBBLES_TIMEOUT = 120  # ~80 bubbles * ~1.5s each
 ADD_BUBBLES_TIMEOUT = 500  # ~80 bubbles * ~1.5s each
 
+# Field options for bubble popup (inspired by test.py); 5 options each for variety
+ZONE_OPTIONS = ["A1", "A2", "B1", "B2", "C1"]
+CHAR_OPTIONS = ["Length", "Width", "Diameter", "Slot length", "Flatness"]
+REQ_OPTIONS = ["10", "25.5", "0.5", "100", "1.25"]
+NEG_OPTIONS = ["0.1", "0.05", "0.2", "0.01", "0.5"]
+POS_OPTIONS = ["0.1", "0.05", "0.2", "0.01", "0.5"]
+EQUIP_OPTIONS = ["Vernier caliper", "Digital vernier caliper", "Digital micrometer", "Pin gauge", "CMM"]
+
 # =============================================================================
 # HELPERS
 # =============================================================================
@@ -348,38 +356,26 @@ def add_bubbles() -> None:
         time.sleep(0.3)
 
         # Fill requirement popup: Zone, Char, Req, neg, pos, equip
-        # Enter advances; last Enter saves
-        zone_val = f"A{(i % 26) + 1}"
-        pyautogui.write(zone_val, interval=0.02)
-        pyautogui.press("enter")
-        time.sleep(0.05)
-
-        pyautogui.write("Length", interval=0.02)
-        pyautogui.press("enter")
-        time.sleep(0.05)
-
-        pyautogui.write("10", interval=0.02)
-        pyautogui.press("enter")
-        time.sleep(0.05)
-
-        pyautogui.write("0.1", interval=0.02)
-        pyautogui.press("enter")
-        time.sleep(0.05)
-
-        pyautogui.write("0.1", interval=0.02)
-        pyautogui.press("enter")
-        time.sleep(0.05)
-
-        pyautogui.write("Vernier caliper", interval=0.02)
-        pyautogui.press("enter")
-        time.sleep(0.3)
+        # Enter advances; last Enter saves; pick random option per field to hit many cases
+        fields = {
+            "zone": random.choice(ZONE_OPTIONS),
+            "char": random.choice(CHAR_OPTIONS),
+            "req": random.choice(REQ_OPTIONS),
+            "neg": random.choice(NEG_OPTIONS),
+            "pos": random.choice(POS_OPTIONS),
+            "equip": random.choice(EQUIP_OPTIONS),
+        }
+        for j, (_, val) in enumerate(fields.items()):
+            pyautogui.write(str(val), interval=0.02)
+            pyautogui.press("enter")
+            time.sleep(0.3 if j == len(fields) - 1 else 0.05)
 
         if (i + 1) % 5 == 0:
             if rev == 0 :
                 pyautogui.press("left")
                 rev = 1
                 time.sleep(0.3)
-            if rev == 1 :
+            elif rev == 1 :
                 pyautogui.press("right")
                 rev = 0
                 time.sleep(0.3)

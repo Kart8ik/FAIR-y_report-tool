@@ -1324,15 +1324,28 @@ def save_report():
     # WRITE DATA (flows naturally)
     row = START_ROW
     for b in balloons:
-        ws.cell(row=row, column=1).value = b["page"] + 1
         ws.cell(row=row, column=2).value = b["zone"]
         ws.cell(row=row, column=3).value = b["no"]
         ws.cell(row=row, column=4).value = b['char']
-        ws.cell(row=row, column=5).value = b["req"]
-        ws.cell(row=row, column=6).value = b["neg"]
-        ws.cell(row=row, column=7).value = b["pos"]
-        ws.cell(row=row, column=8).value = round(to_number_list_item(b['req']) - to_number_list_item(b['neg']), 2)
-        ws.cell(row=row, column=9).value = round(to_number_list_item(b['req']) + to_number_list_item(b['pos']), 2)
+        # Numerical values: use cell ref + number_format="General" to preserve format
+        _c1 = ws.cell(row=row, column=1)
+        _c1.value = b["page"] + 1
+        _c1.number_format = "General"
+        _c5 = ws.cell(row=row, column=5)
+        _c5.value = b["req"]
+        _c5.number_format = "General"
+        _c6 = ws.cell(row=row, column=6)
+        _c6.value = b["neg"]
+        _c6.number_format = "General"
+        _c7 = ws.cell(row=row, column=7)
+        _c7.value = b["pos"]
+        _c7.number_format = "General"
+        _c8 = ws.cell(row=row, column=8)
+        _c8.value = round(to_number_list_item(b['req']) - to_number_list_item(b['neg']), 2)
+        _c8.number_format = "General"
+        _c9 = ws.cell(row=row, column=9)
+        _c9.value = round(to_number_list_item(b['req']) + to_number_list_item(b['pos']), 2)
+        _c9.number_format = "General"
         ws.cell(row=row, column=10).value = b["equip"]
         row += 1
 
