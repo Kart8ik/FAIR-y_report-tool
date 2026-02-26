@@ -52,7 +52,7 @@ doc = None
 num_pages = 0
 current_page_index = 0
 current_page = None  # set after a PDF is opened via open_pdf()
-TEMPLATE_XLSX = resource_path("FORMAT_WORBYN.xlsx")
+TEMPLATE_XLSX = resource_path("FORMAT_WORBYN_2.xlsx")
 
 # ================= STATE =================
 zoom = 1.5

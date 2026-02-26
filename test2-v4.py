@@ -1,4 +1,4 @@
-from turtle import color
+from typing import ValuesView
 import fitz
 import tkinter as tk
 from tkinter import messagebox, filedialog, ttk
@@ -11,6 +11,7 @@ from copy import copy
 import sys, os
 import json
 
+#================resolves path of files to be used with pyinstaller
 def resource_path(relative_path):
     try:
         base_path = sys._MEIPASS   # PyInstaller temp dir
@@ -51,7 +52,7 @@ doc = None
 num_pages = 0
 current_page_index = 0
 current_page = None  # set after a PDF is opened via open_pdf()
-TEMPLATE_XLSX = resource_path("FORMAT.xlsx")
+TEMPLATE_XLSX = resource_path("FORMAT_WORBYN.xlsx")
 
 # ================= STATE =================
 zoom = 1.5
@@ -60,7 +61,6 @@ balloons = []
 last_balloon_cache = {"zone": "", "char": "", "req": "", "neg": "", "pos": "", "equip": ""}
 current_project_path = None
 project_dirty = False
-headers_dirty = False
 rendered_img = None
 rendered_zoom = None
 rendered_page_index = None
@@ -71,44 +71,6 @@ offset_x, offset_y = 0, 0
 # Two-point balloon placement state
 two_point_mode = False
 pending_start = None
-
-HEADER_KEYS = (
-    "part_number",
-    "drawing_rev",
-    "rm_used",
-    "date_inspected",
-    "part_description",
-    "customer",
-    "project_name",
-    "accepted_qty",
-)
-
-HEADER_CELL_MAP = {
-    "part_number": "E2",
-    "drawing_rev": "E3",
-    "rm_used": "E4",
-    "date_inspected": "E5",
-    "part_description": "L2",
-    "customer": "L3",
-    "project_name": "L4",
-    "accepted_qty": "L5",
-}
-
-
-def default_headers():
-    return {key: "" for key in HEADER_KEYS}
-
-
-def normalize_headers(headers):
-    normalized = default_headers()
-    if isinstance(headers, dict):
-        for key in HEADER_KEYS:
-            val = headers.get(key, "")
-            normalized[key] = "" if val is None else str(val).strip()
-    return normalized
-
-
-project_headers = default_headers()
 
 # =====================================================
 # RENDER PDF
@@ -229,7 +191,6 @@ def render(force=False):
 def open_pdf():
     global PDF_IN, doc, num_pages, current_page_index, balloons, balloon_no
     global offset_x, offset_y, page_cache, pending_start, project_dirty, current_project_path
-    global project_headers, headers_dirty
 
     path = filedialog.askopenfilename(
         title="Select PDF",
@@ -255,8 +216,6 @@ def open_pdf():
     # Fresh start - no project file associated, clean state
     current_project_path = None
     project_dirty = False
-    project_headers = default_headers()
-    headers_dirty = False
 
     render(force=True)
     update_two_point_ui()
@@ -266,10 +225,6 @@ def open_pdf():
 # =====================================================
 # POPUP (Requirement / Tolerance)
 # =====================================================
-
-def safe_insert(entry, value): #function to ensure values are stored safely in string form only
-    entry.insert(0, "" if value is None else str(value))
-
 def requirement_popup(existing=None):
     if not doc:
         messagebox.showwarning("No File", "Open file to work on")
@@ -488,7 +443,6 @@ def requirement_popup(existing=None):
     )
 
     if existing:
-        # print(existing)
         zone.insert(0, existing["zone"])
         char.insert(0, existing["char"])
         req.insert(0, existing["req"])
@@ -518,7 +472,6 @@ def requirement_popup(existing=None):
 
     # moves the cursor to the input for ease of use
     zone.focus_set()
-    popup.after(50, lambda: zone.select_range(0, tk.END))
 
     def save():
         req_val_raw = get_value(req)
@@ -552,7 +505,7 @@ def requirement_popup(existing=None):
                 "pos": keep_or(last_balloon_cache.get("pos", ""), pos_val_raw),
                 "equip": keep_or(last_balloon_cache.get("equip", ""), result["equip"]),
             })
-        # print(f"char: {char.get().strip()}, req: {req_val}, neg: {neg_val}, pos: {pos_val}, equip: {equip.get().strip()} \n")
+        # print(f"char: {char.get().strip()}, req: {req_val}, tol: {tol_val}, pos: {pos_val}, equip: {equip.get().strip()} \n")
         popup.destroy()
 
     def delete():
@@ -577,6 +530,7 @@ def requirement_popup(existing=None):
         )
 
     # key binds for ease of use
+
     zone.bind("<Return>", lambda e: char.focus_set())
     zone.bind("<Down>", lambda e: char.focus_set())
 
@@ -602,144 +556,6 @@ def requirement_popup(existing=None):
 
     popup.wait_window()
     return result
-
-
-def headers_popup():
-    global project_headers, project_dirty, headers_dirty
-
-    if not doc:
-        messagebox.showwarning("No File", "Open file to work on")
-        return
-
-    popup = tk.Toplevel(root)
-    popup.title("Headers")
-    apply_icon(popup)
-    popup.transient(root)
-    popup.grab_set()
-
-    popup.columnconfigure(1, weight=1)
-    popup.columnconfigure(3, weight=1)
-
-    values = normalize_headers(project_headers)
-    if not values["date_inspected"]:
-        values["date_inspected"] = datetime.now().strftime("%Y-%m-%d")
-
-    entries = {}
-    layout = [
-        ("Part Number", "part_number", "Part Description", "part_description"),
-        ("Drawing Rev", "drawing_rev", "Customer", "customer"),
-        ("RM Used", "rm_used", "Project Name", "project_name"),
-        ("Date Inspected", "date_inspected", "Accepted Qty", "accepted_qty"),
-    ]
-
-    def accepted_qty_validate(new_value):
-        return new_value == "" or new_value.isdigit()
-
-    vcmd_qty = (popup.register(accepted_qty_validate), "%P")
-
-    row_idx = 0
-    for left_label, left_key, right_label, right_key in layout:
-        tk.Label(popup, text=left_label).grid(row=row_idx, column=0, padx=(10, 6), pady=6, sticky="e")
-        left_entry = tk.Entry(popup, width=24)
-        safe_insert(left_entry, values.get(left_key, ""))
-        left_entry.grid(row=row_idx, column=1, padx=(0, 16), pady=6, sticky="we")
-        entries[left_key] = left_entry
-
-        tk.Label(popup, text=right_label).grid(row=row_idx, column=2, padx=(0, 6), pady=6, sticky="e")
-        if right_key == "accepted_qty":
-            right_entry = tk.Entry(popup, width=24, validate="key", validatecommand=vcmd_qty)
-        else:
-            right_entry = tk.Entry(popup, width=24)
-        safe_insert(right_entry, values.get(right_key, ""))
-        right_entry.grid(row=row_idx, column=3, padx=(0, 10), pady=6, sticky="we")
-        entries[right_key] = right_entry
-        row_idx += 1
-
-    order = [
-        "part_number",
-        "drawing_rev",
-        "rm_used",
-        "date_inspected",
-        "part_description",
-        "customer",
-        "project_name",
-        "accepted_qty",
-    ]
-
-    def close_without_save():
-        popup.destroy()
-
-    def save_headers():
-        accepted_qty = entries["accepted_qty"].get().strip()
-        if accepted_qty and not accepted_qty.isdigit():
-            messagebox.showwarning("Invalid Value", "Accepted Qty must be numeric")
-            entries["accepted_qty"].focus_set()
-            return
-
-        for key in HEADER_KEYS:
-            project_headers[key] = entries[key].get().strip()
-
-        global project_dirty, headers_dirty
-        project_dirty = True
-        headers_dirty = True
-        popup.destroy()
-
-    for idx, key in enumerate(order):
-        if idx < len(order) - 1:
-            entries[key].bind("<Return>", lambda e, i=idx: entries[order[i + 1]].focus_set())
-        else:
-            entries[key].bind("<Return>", lambda e: save_headers())
-
-    popup.bind("<Escape>", lambda e: close_without_save())
-
-    tk.Button(popup, text="Cancel", width=10, command=close_without_save).grid(
-        row=row_idx, column=0, padx=(0, 8), pady=(8, 10), sticky="e"
-    )
-    tk.Button(popup, text="Save", width=10, command=save_headers).grid(
-        row=row_idx, column=3, padx=(0, 10), pady=(8, 10), sticky="e"
-    )
-
-    entries["part_number"].focus_set()
-    popup.after(50, lambda: entries["part_number"].select_range(0, tk.END))
-    popup.wait_window()
-
-
-def confirm_missing_headers():
-
-    def on_continue():
-        result["continue"] = True
-        popup.destroy()
-
-    def on_go_headers():
-        result["continue"] = False
-        popup.destroy()
-
-    popup = tk.Toplevel(root)
-    popup.title("Missing Headers")
-    apply_icon(popup)
-    popup.transient(root)
-    popup.grab_set()
-    popup.resizable(False, False)
-
-    result = {"continue": True}
-
-    message = (
-        "Some report header details are empty.\n"
-        "You can continue, but the exported report will have missing information.\n\n"
-        "Do you want to continue?"
-    )
-    tk.Label(popup, text=message, justify="left", padx=12, pady=12).pack(anchor="w")
-
-    btn_row = tk.Frame(popup, padx=12, pady=12)
-    btn_row.pack(fill="x")
-
-    tk.Button(btn_row, text="Continue", width=12, command=on_continue).pack(side="left")
-    tk.Button(btn_row, text="Go to Headers", width=12, command=on_go_headers).pack(side="right")
-
-    popup.bind("<Return>", lambda e: on_continue())
-    popup.bind("<Escape>", lambda e: on_continue())
-    popup.wait_window()
-    return result["continue"]
 
 
 
@@ -848,7 +664,9 @@ def delete_balloon(balloon):
     render(force=True)
 
 
-
+# =====================================================
+# highlights balloon when selected to edit 
+# =====================================================
 def highlight_balloon(balloon, duration=2000):
 
     balloon["highlight"] = True
@@ -1078,7 +896,6 @@ def show_shortcuts():
         ("Ctrl + O", "Open PDF"),
         ("Ctrl + P", "Open Project (.fairy)"),
         ("Ctrl + Shift + P", "Save Project (.fairy)"),
-        ("Ctrl + H", "Open Headers"),
         ("Ctrl + S", "Save PDF"),
         ("Ctrl + Shift + S", "Save Report"),
         ("Escape", "Exit any Popup"),
@@ -1112,7 +929,7 @@ def show_shortcuts():
 # =====================================================
 def update_balloon_list():
     # Fixed column widths for neat alignment in the list view
-    w_no, w_zone, w_char, w_req, w_tol, w_min_max, w_equip = 3, 6, 28, 8, 6, 8, 22
+    w_no, w_zone, w_char, w_req, w_tol, w_equip = 3, 6, 28, 8, 6, 22
     header = (
         f"{'No':<{w_no}} | "
         f"{'Zone':<{w_zone}} | "
@@ -1120,8 +937,8 @@ def update_balloon_list():
         f"{'Req':<{w_req}} | "
         f"{'-Tol':<{w_tol}} | "
         f"{'+Tol':<{w_tol}} | "
-        f"{'Min':<{w_min_max}} | "
-        f"{'Max':<{w_min_max}} | "
+        f"{'Low':<{w_tol}} | "
+        f"{'Up':<{w_tol}} | "
         f"{'Equip':<{w_equip}}"
     )
     sep = "-" * len(header)
@@ -1131,9 +948,7 @@ def update_balloon_list():
     balloon_listbox.insert(tk.END, sep)
 
     for b in balloons:
-        if b["page"] == current_page_index:
-            min_val = round(to_number_list_item(b['req']) - to_number_list_item(b['neg']), 2)
-            max_val = round(to_number_list_item(b['req']) + to_number_list_item(b['pos']), 2)
+        if b["page"] == current_page_index:     
             balloon_listbox.insert(
                 tk.END,
                 f"{str(b['no']):<{w_no}} | "
@@ -1142,13 +957,13 @@ def update_balloon_list():
                 f"{str(b['req']):<{w_req}} | "
                 f"{str(b['neg']):<{w_tol}} | "
                 f"{str(b['pos']):<{w_tol}} | "
-                f"{str(min_val):<{w_min_max}} | "
-                f"{str(max_val):<{w_min_max}} | "
+                f"{str(round(to_number_list_item(b['req']) - to_number_list_item(b['neg']), 2)):<{w_tol}} | "
+                f"{str(round(to_number_list_item(b['req']) + to_number_list_item(b['pos']), 2)):<{w_tol}} | "
                 f"{str(b['equip']):<{w_equip}}"
             )
 
 # =====================================================
-# SAVE balloonD PDF
+# SAVE BALLOONED PDF
 # =====================================================
 def save_pdf():
     if not doc:
@@ -1221,7 +1036,7 @@ def save_pdf():
 
 
 # =====================================================
-# SAVE REPORT (UNCHANGED)
+# SAVE REPORT
 # =====================================================
 def save_report():
     if not doc:
@@ -1231,13 +1046,6 @@ def save_report():
     if not balloons:
         messagebox.showwarning("No data", "No balloons to export")
         return
-
-    headers = normalize_headers(project_headers)
-    filled_headers = [key for key in HEADER_KEYS if headers.get(key)]
-    if filled_headers and len(filled_headers) < len(HEADER_KEYS):
-        if not confirm_missing_headers():
-            headers_popup()
-            return
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
     default_name = f"FAIR_Report_{timestamp}.xlsx"
@@ -1256,21 +1064,16 @@ def save_report():
     wb = load_workbook(report_file)
     ws = wb.active
 
-    for key, cell in HEADER_CELL_MAP.items():
-        val = headers.get(key)
-        if val not in ("", None):
-            ws[cell].value = val
-
     # The template has 15 data rows (8-22). Row 23 participates in the merged
     # Legends block (A23:B24, C23:M24), so we must insert before that at row 23.
-    START_ROW = 8
-    TEMPLATE_ROWS = 15
+    START_ROW = 12
+    TEMPLATE_ROWS = 42
     LAST_TEMPLATE_ROW = START_ROW + TEMPLATE_ROWS - 1  # 22
     INSERT_AT = LAST_TEMPLATE_ROW + 1                  # 23 (just before merged legends)
     template_row_idx = LAST_TEMPLATE_ROW
-    footer_rows = {24: ws.row_dimensions[24].height,
-                   25: ws.row_dimensions[25].height,
-                   26: ws.row_dimensions[26].height}
+    footer_rows = {55: ws.row_dimensions[55].height,
+                   56: ws.row_dimensions[56].height,
+                   57: ws.row_dimensions[57].height}
 
     def copy_row_style(src_row_idx, dest_row_idx, clear_values=True):
         # Copy styles across all columns to preserve borders/alignment
@@ -1297,9 +1100,8 @@ def save_report():
         # Re-merge the footer block (Legends/Observations/Sign-off) so it
         # stays intact after the shift, and restore footer row heights.
         footer_merges = [
-            "A24:C24", "D24:P24",
-            "A25:C25","D25:P25",
-            "A26:C26", "D26:E26", "F26:I26", "J26:K26", "L26:M26", "N26:P26",
+            "A55:C55", "D55:L55",
+            "G56:H56","I56:L56",
         ]
         for rng in footer_merges:
             if rng in ws.merged_cells:
@@ -1325,8 +1127,8 @@ def save_report():
     row = START_ROW
     for b in balloons:
         ws.cell(row=row, column=1).value = b["page"] + 1
-        ws.cell(row=row, column=2).value = b["zone"]
-        ws.cell(row=row, column=3).value = b["no"]
+        ws.cell(row=row, column=2).value = b["no"]
+        ws.cell(row=row, column=3).value = b["zone"]
         ws.cell(row=row, column=4).value = b['char']
         ws.cell(row=row, column=5).value = b["req"]
         ws.cell(row=row, column=6).value = b["neg"]
@@ -1350,7 +1152,7 @@ def save_report():
 # =====================================================
 def save_project_to_path(project_file):
     """Save project to a specific path without dialog. Returns True on success."""
-    if not doc:
+    if not doc or not balloons:
         return False
     
     # Build project data structure
@@ -1360,7 +1162,6 @@ def save_project_to_path(project_file):
             "path": PDF_IN,
             "page_count": num_pages
         },
-        "headers": normalize_headers(project_headers),
         "balloons": []
     }
 
@@ -1392,12 +1193,10 @@ def save_project_to_path(project_file):
             json.dump(project_data, f, indent=2)
         
         # Track current project for session persistence and mark clean
-        global current_project_path, project_dirty, headers_dirty
+        global current_project_path, project_dirty
         current_project_path = project_file
         project_dirty = False
-        headers_dirty = False
 
-        # Save state immediately
         state = {"last_project": project_file}
         save_app_state(state)
 
@@ -1412,7 +1211,7 @@ def save_project():
         messagebox.showwarning("No File", "No file to save project")
         return False
 
-    if not balloons and not any(normalize_headers(project_headers).values()):
+    if not balloons:
         messagebox.showwarning("No data", "No balloons to save")
         return False
 
@@ -1493,7 +1292,6 @@ def load_project_from_path(project_file, show_success_msg=True, prompt_for_pdf=T
     # Close existing document if open
     global doc, PDF_IN, num_pages, current_page_index, balloons, balloon_no
     global zoom, offset_x, offset_y, page_cache, pending_start, project_dirty
-    global project_headers, headers_dirty
 
     if doc:
         doc.close()
@@ -1523,12 +1321,12 @@ def load_project_from_path(project_file, show_success_msg=True, prompt_for_pdf=T
         # Validate balloon has required fields
         required_fields = ["page", "no", "x", "y", "r", "zone", "char", "req", "neg", "pos", "equip"]
         if not all(field in balloon_data for field in required_fields):
-            skipped_balloons.append(f"Balloon {balloon_data.get('no', '?')} - missing fields")
+            skipped_balloons.append(f"balloon {balloon_data.get('no', '?')} - missing fields")
             continue
 
         # Skip balloons referencing invalid pages
         if balloon_data["page"] >= num_pages or balloon_data["page"] < 0:
-            skipped_balloons.append(f"Balloon {balloon_data['no']} - invalid page {balloon_data['page']}")
+            skipped_balloons.append(f"balloon {balloon_data['no']} - invalid page {balloon_data['page']}")
             continue
 
         # Create balloon with all data
@@ -1559,7 +1357,6 @@ def load_project_from_path(project_file, show_success_msg=True, prompt_for_pdf=T
     offset_x = offset_y = 0
     page_cache.clear()
     pending_start = None
-    project_headers = normalize_headers(project_data.get("headers", {}))
 
     # Render the first page
     render(force=True)
@@ -1567,7 +1364,6 @@ def load_project_from_path(project_file, show_success_msg=True, prompt_for_pdf=T
     
     # Mark project as clean after successful load
     project_dirty = False
-    headers_dirty = False
 
     # Show warnings if any balloons were skipped
     if show_success_msg:
@@ -1661,7 +1457,9 @@ def auto_restore_last_project():
         pass
 
 
+#===========handles quitting of app to safely quit without losing information===========
 def on_app_close():
+
     # Check for unsaved changes
     if not project_dirty:
         root.destroy()
@@ -1728,7 +1526,6 @@ tk.Button(toolbar, text="Undo balloon", command=undo).pack(side="left", padx=(0,
 tk.Button(toolbar, text="Save PDF", command=save_pdf).pack(side="left")
 tk.Button(toolbar, text="Save Report", command=save_report).pack(side="left")
 tk.Button(toolbar, text="Save Project", command=save_project).pack(side="left", padx=(0,5))
-tk.Button(toolbar, text="Headers", command=headers_popup).pack(side="left", padx=(0,5))
 tk.Button(toolbar, text="Help", command=show_shortcuts).pack(side="left")
 
 def render_two_point_preview():
@@ -1768,8 +1565,6 @@ root.bind("<Control-Shift-p>", lambda e: save_project())
 root.bind("<Control-S>", lambda e: save_pdf())
 root.bind("<Control-s>", lambda e: save_pdf())
 root.bind("<Control-Shift-S>", lambda e: save_report())
-root.bind("<Control-H>", lambda e: headers_popup())
-root.bind("<Control-h>", lambda e: headers_popup())
 root.bind("<Right>", lambda e: next_page())
 root.bind("<Left>", lambda e: prev_page())
 root.bind("<Control-Z>", lambda e: undo())
