@@ -1,0 +1,4 @@
+# Dependencies for fairy_ui_stress_test.py
+# Install: pip install -r requirements-stresstest.txt
+pyautogui
+pygetwindow
