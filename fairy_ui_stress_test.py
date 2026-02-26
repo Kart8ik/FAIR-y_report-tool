@@ -57,7 +57,7 @@ OUTPUT_DIR = os.path.join(
 )
 
 # Number of bubbles to add
-BUBBLE_COUNT = 30
+BUBBLE_COUNT = 37
 
 # Loop entire test this many times (1 = single run)
 ITERATIONS = 1
@@ -75,7 +75,7 @@ APP_WINDOW_TITLE = "FAIR-y"
 LAUNCH_TIMEOUT = 15
 CLOSE_TIMEOUT = 5
 # ADD_BUBBLES_TIMEOUT = 120  # ~80 bubbles * ~1.5s each
-ADD_BUBBLES_TIMEOUT = 80  # ~80 bubbles * ~1.5s each
+ADD_BUBBLES_TIMEOUT = 500  # ~80 bubbles * ~1.5s each
 
 # =============================================================================
 # HELPERS
@@ -154,7 +154,7 @@ def navigate_and_save_with_default(output_dir: str, turn: int = 1) -> None:
     num_enters: 3 when in different dir (first save), 2 when already in same dir.
     """
     time.sleep(PAUSE_SEC)
-    if turn is 1:
+    if turn == 1:
         pyautogui.hotkey("alt", "d")
         time.sleep(0.2)
         pyautogui.hotkey("ctrl", "a")
@@ -333,7 +333,7 @@ def add_bubbles() -> None:
     pad_y = (y_max - y_min) // 6
     cx_min, cx_max = x_min + pad_x, x_max - pad_x
     cy_min, cy_max = y_min + pad_y, y_max - pad_y
-
+    rev = 0
     start = time.time()
     for i in range(BUBBLE_COUNT):
         if time.time() - start > ADD_BUBBLES_TIMEOUT:
@@ -374,7 +374,15 @@ def add_bubbles() -> None:
         pyautogui.press("enter")
         time.sleep(0.3)
 
-        if (i + 1) % 20 == 0:
+        if (i + 1) % 5 == 0:
+            if rev == 0 :
+                pyautogui.press("left")
+                rev = 1
+                time.sleep(0.3)
+            if rev == 1 :
+                pyautogui.press("right")
+                rev = 0
+                time.sleep(0.3)
             log(f"  Added {i + 1}/{BUBBLE_COUNT} bubbles")
 
     log(f"Phase 4 complete: {BUBBLE_COUNT} bubbles added")
