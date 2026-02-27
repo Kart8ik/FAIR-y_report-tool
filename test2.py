@@ -88,16 +88,16 @@ HEADER_KEYS = (
 )
 
 HEADER_CELL_MAP = {
-    "fair_number": "C4",
-    "drawing_number": "C5",
-    "drawing_rev_no": "C6",
-    "customer_name": "C7",
-    "part_number": "H4",
-    "part_name": "H5",
-    "material_spec": "L4",
-    "mtc_no": "L5",
-    "batch_heat_no": "L6",
-    "inspection_date": "L7",
+    "fair_number": "D4",
+    "drawing_number": "D5",
+    "drawing_rev_no": "D6",
+    "customer_name": "D7",
+    "part_number": "I4",
+    "part_name": "I5",
+    "material_spec": "M4",
+    "mtc_no": "M5",
+    "batch_heat_no": "M6",
+    "inspection_date": "M7",
 }
 
 
@@ -1284,9 +1284,9 @@ def save_report():
         # Re-merge the footer block (Legends/Observations/Sign-off) so it
         # stays intact after the shift, and restore footer row heights.
         footer_merges = [
-            "A46", "B46:L46",
-            "A47:C47", "D47:G47", "H47:I47", "J47:L47",
-            "A48:C48", "D48:G48", "H48:I48", "J48:L48",
+            "A46:B46", "C46:M46",
+            "A47:D47", "E47:H47", "I47:J47", "K47:M47",
+            "A48:D48", "E48:H48", "I48:J48", "K48:M48",
         ]
         for rng in footer_merges:
             if rng in ws.merged_cells:
@@ -1311,15 +1311,25 @@ def save_report():
     # WRITE DATA (flows naturally)
     row = START_ROW
     for b in balloons:
-        ws.cell(row=row, column=1).value = b["page"] + 1
-        ws.cell(row=row, column=2).value = b["no"]
+        ws.cell(row=row, column=1).value = b["no"]
+        ws.cell(row=row, column=2).value = b["page"] + 1
         ws.cell(row=row, column=3).value = b["zone"]
         ws.cell(row=row, column=4).value = b['char']
-        ws.cell(row=row, column=5).value = b["req"]
-        ws.cell(row=row, column=6).value = b["neg"]
-        ws.cell(row=row, column=7).value = b["pos"]
-        ws.cell(row=row, column=8).value = round(to_number_list_item(b['req']) - to_number_list_item(b['neg']), 2)
-        ws.cell(row=row, column=9).value = round(to_number_list_item(b['req']) + to_number_list_item(b['pos']), 2)
+        _c5 = ws.cell(row=row, column=5)
+        _c5.value = b["req"]
+        _c5.number_format = "General"
+        _c6 = ws.cell(row=row, column=6)
+        _c6.value = b["pos"]
+        _c6.number_format = "General"
+        _c7 = ws.cell(row=row, column=7)
+        _c7.value = b["neg"]
+        _c7.number_format = "General"
+        _c8 = ws.cell(row=row, column=8)
+        _c8.value = round(to_number_list_item(b['req']) - to_number_list_item(b['neg']), 2)
+        _c8.number_format = "General"
+        _c9 = ws.cell(row=row, column=9)
+        _c9.value = round(to_number_list_item(b['req']) + to_number_list_item(b['pos']), 2)
+        _c9.number_format = "General"
         ws.cell(row=row, column=10).value = b["equip"]
         row += 1
 

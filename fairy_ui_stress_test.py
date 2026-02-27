@@ -57,7 +57,7 @@ OUTPUT_DIR = os.path.join(
 )
 
 # Number of bubbles to add
-BUBBLE_COUNT = 37
+BUBBLE_COUNT = 108
 
 # Loop entire test this many times (1 = single run)
 ITERATIONS = 1
@@ -75,7 +75,7 @@ APP_WINDOW_TITLE = "FAIR-y"
 LAUNCH_TIMEOUT = 15
 CLOSE_TIMEOUT = 5
 # ADD_BUBBLES_TIMEOUT = 120  # ~80 bubbles * ~1.5s each
-ADD_BUBBLES_TIMEOUT = 500  # ~80 bubbles * ~1.5s each
+ADD_BUBBLES_TIMEOUT = 800  # ~80 bubbles * ~1.5s each
 
 # Field options for bubble popup (inspired by test.py); 5 options each for variety
 ZONE_OPTIONS = ["A1", "A2", "B1", "B2", "C1"]
