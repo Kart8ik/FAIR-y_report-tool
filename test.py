@@ -260,6 +260,7 @@ def open_pdf():
 
     render(force=True)
     update_two_point_ui()
+    headers_popup()
 
 
 

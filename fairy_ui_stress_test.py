@@ -295,9 +295,6 @@ def fill_headers() -> None:
     wins = gw.getWindowsWithTitle(APP_WINDOW_TITLE)
     if wins:
         wins[0].activate()
-    time.sleep(0.3)
-
-    pyautogui.hotkey("ctrl", "h")
     time.sleep(0.5)
 
     # Field order: part_number, drawing_rev, rm_used, date_inspected,

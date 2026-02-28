@@ -266,6 +266,7 @@ def open_pdf():
 
     render(force=True)
     update_two_point_ui()
+    headers_popup()
 
 
 
@@ -1725,8 +1726,8 @@ tk.Button(toolbar, text="Next Page", command=next_page).pack(side="left", padx=(
 tk.Button(toolbar, text="Undo balloon", command=undo).pack(side="left", padx=(0,5))
 tk.Button(toolbar, text="Save PDF", command=save_pdf).pack(side="left")
 tk.Button(toolbar, text="Save Report", command=save_report).pack(side="left")
-tk.Button(toolbar, text="Headers", command=headers_popup).pack(side="left", padx=(0,5))
 tk.Button(toolbar, text="Save Project", command=save_project).pack(side="left", padx=(0,5))
+tk.Button(toolbar, text="Headers", command=headers_popup).pack(side="left", padx=(0,5))
 tk.Button(toolbar, text="Help", command=show_shortcuts).pack(side="left")
 
 def render_two_point_preview():
