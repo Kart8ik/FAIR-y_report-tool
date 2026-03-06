@@ -1,7 +1,7 @@
 from typing import ValuesView
 import fitz
 import tkinter as tk
-from tkinter import messagebox, filedialog, ttk
+from tkinter import messagebox, filedialog, ttk, colorchooser
 from PIL import Image, ImageTk
 from openpyxl import load_workbook
 from openpyxl.utils import range_boundaries
@@ -10,6 +10,30 @@ import shutil
 from copy import copy
 import sys, os
 import json
+
+DEFAULT_BALLOON_COLOR = "#ff0000"
+HIGHLIGHT_FILL_COLOR = "SkyBlue"
+
+
+def normalize_balloon_color(value, fallback=None):
+    if fallback is None:
+        fallback = DEFAULT_BALLOON_COLOR
+    fallback = fallback if isinstance(fallback, str) else DEFAULT_BALLOON_COLOR
+    text = value.strip() if isinstance(value, str) else ""
+    if len(text) == 7 and text[0] == "#":
+        hex_part = text[1:]
+        if all(ch in "0123456789abcdefABCDEF" for ch in hex_part):
+            return f"#{hex_part.lower()}"
+    return normalize_balloon_color(fallback, DEFAULT_BALLOON_COLOR) if fallback != DEFAULT_BALLOON_COLOR else DEFAULT_BALLOON_COLOR
+
+
+def hex_to_fitz_rgb(value):
+    color_hex = normalize_balloon_color(value)
+    return (
+        int(color_hex[1:3], 16) / 255.0,
+        int(color_hex[3:5], 16) / 255.0,
+        int(color_hex[5:7], 16) / 255.0,
+    )
 
 #================resolves path of files to be used with pyinstaller
 def resource_path(relative_path):
@@ -65,13 +89,16 @@ headers_dirty = False
 rendered_img = None
 rendered_zoom = None
 rendered_page_index = None
+rendered_rotation = None
 page_cache = {}  # cache rendered pages per (page_index, zoom)
 
 pan_start = None
+rotation = 0
 offset_x, offset_y = 0, 0
 # Two-point balloon placement state
 two_point_mode = False
 pending_start = None
+selected_balloon_color = DEFAULT_BALLOON_COLOR
 
 # WORBYN report headers (matches FORMAT_WORBYN_2.xlsx layout from image)
 HEADER_KEYS = (
@@ -116,25 +143,46 @@ def normalize_headers(headers):
 
 project_headers = default_headers()
 
+
+def rotate_coords(x, y, w, h):
+    if rotation == 90:
+        return h - y, x
+    if rotation == 180:
+        return w - x, h - y
+    if rotation == 270:
+        return y, w - x
+    return x, y
+
+
+def inverse_rotate_coords(x, y, w, h):
+    if rotation == 90:
+        return y, h - x
+    if rotation == 180:
+        return w - x, h - y
+    if rotation == 270:
+        return w - y, x
+    return x, y
+
 # =====================================================
 # RENDER PDF
 # =====================================================
 def render_pdf():
-    global rendered_img, rendered_zoom, rendered_page_index
+    global rendered_img, rendered_zoom, rendered_page_index, rendered_rotation
 
-    cache_key = (current_page_index, zoom)
+    cache_key = (current_page_index, zoom, rotation)
     cached = page_cache.get(cache_key)
     if cached:
         rendered_img = cached
     else:
         page = doc[current_page_index]
-        mat = fitz.Matrix(zoom, zoom)
+        mat = fitz.Matrix(zoom, zoom).prerotate(rotation)
         pix = page.get_pixmap(matrix=mat)
         img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
         rendered_img = ImageTk.PhotoImage(img)
         page_cache[cache_key] = rendered_img
     rendered_zoom = zoom
     rendered_page_index = current_page_index
+    rendered_rotation = rotation
 
     canvas.delete("pdf")
     canvas.create_image(offset_x, offset_y, anchor="nw",
@@ -142,16 +190,21 @@ def render_pdf():
 
 def render_overlays():
     canvas.delete("overlay")
+    page = doc[current_page_index]
+    w = page.rect.width
+    h = page.rect.height
 
     # Pending start marker for two-point mode
     if pending_start and pending_start["page"] == current_page_index:
-        sx = pending_start["x"] * zoom + offset_x
-        sy = pending_start["y"] * zoom + offset_y
+        marker_color = normalize_balloon_color(selected_balloon_color)
+        sx, sy = rotate_coords(pending_start["x"], pending_start["y"], w, h)
+        sx = sx * zoom + offset_x
+        sy = sy * zoom + offset_y
         marker_r = max(3, (balloon_radius_slider.get() * zoom) / 10)
         canvas.create_oval(
             sx - marker_r, sy - marker_r, sx + marker_r, sy + marker_r,
-            outline="red",
-            fill="red",
+            outline=marker_color,
+            fill=marker_color,
             width=1,
             tags="overlay"
         )
@@ -160,14 +213,17 @@ def render_overlays():
         if b["page"] != current_page_index:
             continue
 
-        x = b["x"] * zoom + offset_x
-        y = b["y"] * zoom + offset_y
+        x, y = rotate_coords(b["x"], b["y"], w, h)
+        x = x * zoom + offset_x
+        y = y * zoom + offset_y
         r = b["r"] * zoom
+        balloon_color = normalize_balloon_color(b.get("color"))
 
         # Draw connector if this balloon was placed via two-point mode
         if b.get("start_x") is not None and b.get("start_y") is not None:
-            sx = b["start_x"] * zoom + offset_x
-            sy = b["start_y"] * zoom + offset_y
+            sx, sy = rotate_coords(b["start_x"], b["start_y"], w, h)
+            sx = sx * zoom + offset_x
+            sy = sy * zoom + offset_y
             line_width = max(2, r / 10)
             dx = x - sx
             dy = y - sy
@@ -180,25 +236,25 @@ def render_overlays():
                 ey = y - dy * scale
             canvas.create_line(
                 sx, sy, ex, ey,
-                fill="red",
+                fill=balloon_color,
                 width=line_width,
                 tags="overlay"
             )
             handle_r = max(3, line_width)
             canvas.create_oval(
                 sx - handle_r, sy - handle_r, sx + handle_r, sy + handle_r,
-                outline="red",
-                fill="red",
+                outline=balloon_color,
+                fill=balloon_color,
                 width=1,
                 tags="overlay"
             )
 
         if b.get("highlight"):
-            outline = "red"
-            fill = "SkyBlue"
+            outline = balloon_color
+            fill = HIGHLIGHT_FILL_COLOR
             width = max(3, r / 6)
         else:
-            outline = "red"
+            outline = balloon_color
             fill = ""
             width = max(2, r / 10)
 
@@ -223,7 +279,7 @@ def render(force=False):
     if not doc:
         return
 
-    if force or rendered_zoom != zoom or rendered_page_index != current_page_index:
+    if force or rendered_zoom != zoom or rendered_page_index != current_page_index or rendered_rotation != rotation:
         render_pdf()
 
     render_overlays()
@@ -235,7 +291,7 @@ def render(force=False):
 def open_pdf():
     global PDF_IN, doc, num_pages, current_page_index, balloons, balloon_no
     global offset_x, offset_y, page_cache, pending_start, project_dirty, current_project_path
-    global project_headers, headers_dirty
+    global project_headers, headers_dirty, rotation
 
     path = filedialog.askopenfilename(
         title="Select PDF",
@@ -257,6 +313,7 @@ def open_pdf():
     offset_x = offset_y = 0
     page_cache.clear()
     pending_start = None
+    rotation = 0
     
     # Fresh start - no project file associated, clean state
     current_project_path = None
@@ -756,8 +813,10 @@ def add_balloon(event):
 
     global balloon_no, pending_start
 
-    pdf_x = (event.x - offset_x) / zoom
-    pdf_y = (event.y - offset_y) / zoom
+    display_x = (event.x - offset_x) / zoom
+    display_y = (event.y - offset_y) / zoom
+    page = doc[current_page_index]
+    pdf_x, pdf_y = inverse_rotate_coords(display_x, display_y, page.rect.width, page.rect.height)
 
     # Two-click flow
     if two_point_mode:
@@ -786,6 +845,7 @@ def add_balloon(event):
         "neg": "",
         "pos": "",
         "equip": "",
+        "color": normalize_balloon_color(selected_balloon_color),
         "highlight": False,
         "start_x": start["x"] if two_point_mode else None,
         "start_y": start["y"] if two_point_mode else None,
@@ -1023,6 +1083,22 @@ def end_pan(event):
     pan_start = None
 
 # =====================================================
+# rotating the page
+# =====================================================
+
+def rotate_left():
+    global rotation
+    rotation = (rotation - 90) % 360
+    clear_pending_start()
+    render(force=True)
+
+def rotate_right():
+    global rotation
+    rotation = (rotation + 90) % 360
+    clear_pending_start()
+    render(force=True)
+
+# =====================================================
 # PAGE NAV / UNDO
 # =====================================================
 def next_page():
@@ -1161,16 +1237,24 @@ def save_pdf():
     if not PDF_OUT:
         return
 
+    export_rotation = (360 - rotation) % 360
+
     out = fitz.open()
     for i in range(num_pages):
-        p = out.new_page(width=doc[i].rect.width, height=doc[i].rect.height)
-        p.show_pdf_page(p.rect, doc, i)
+        src_page = doc[i]
+        src_w = src_page.rect.width
+        src_h = src_page.rect.height
+        out_w, out_h = (src_h, src_w) if export_rotation in (90, 270) else (src_w, src_h)
+        p = out.new_page(width=out_w, height=out_h)
+        p.show_pdf_page(p.rect, doc, i, rotate=export_rotation)
         for b in balloons:
             if b["page"] == i:
-                x, y, r = b["x"], b["y"], b["r"]
+                x, y = rotate_coords(b["x"], b["y"], src_w, src_h)
+                r = b["r"]
+                balloon_rgb = hex_to_fitz_rgb(b.get("color"))
                 # Draw connector if present (project to balloon edge)
                 if b.get("start_x") is not None and b.get("start_y") is not None:
-                    sx, sy = b["start_x"], b["start_y"]
+                    sx, sy = rotate_coords(b["start_x"], b["start_y"], src_w, src_h)
                     dx = x - sx
                     dy = y - sy
                     dist = (dx * dx + dy * dy) ** 0.5
@@ -1180,15 +1264,15 @@ def save_pdf():
                         scale = r / dist
                         ex = x - dx * scale
                         ey = y - dy * scale
-                    p.draw_line(fitz.Point(sx, sy), fitz.Point(ex, ey), color=(1, 0, 0), width=r/10)
+                    p.draw_line(fitz.Point(sx, sy), fitz.Point(ex, ey), color=balloon_rgb, width=r/10)
                     handle_r = r/10
                     p.draw_oval(
                         fitz.Rect(sx - handle_r, sy - handle_r, sx + handle_r, sy + handle_r),
-                        color=(1, 0, 0),
-                        fill=(1, 0, 0),
+                        color=balloon_rgb,
+                        fill=balloon_rgb,
                         width=1
                     )
-                p.draw_oval(fitz.Rect(x-r, y-r, x+r, y+r), color=(1,0,0), width=r/10)
+                p.draw_oval(fitz.Rect(x-r, y-r, x+r, y+r), color=balloon_rgb, width=r/10)
                 text = str(b["no"])
                 font_size = r
                 try:
@@ -1198,7 +1282,7 @@ def save_pdf():
                 # center horizontally; adjust baseline to visually center vertically
                 tx = x - text_width / 2
                 ty = y + font_size * 0.35
-                p.insert_text(fitz.Point(tx, ty), text, fontsize=font_size, color=(1,0,0))
+                p.insert_text(fitz.Point(tx, ty), text, fontsize=font_size, color=balloon_rgb)
     out.save(PDF_OUT)
     out.close()
     messagebox.showinfo("Saved", f"Ballooned drawing saved as {PDF_OUT}")
@@ -1364,6 +1448,9 @@ def save_project_to_path(project_file):
             "path": PDF_IN,
             "page_count": num_pages
         },
+        "view": {
+            "rotation": rotation
+        },
         "headers": normalize_headers(project_headers),
         "balloons": []
     }
@@ -1381,7 +1468,8 @@ def save_project_to_path(project_file):
             "req": b["req"],
             "neg": b["neg"],
             "pos": b["pos"],
-            "equip": b["equip"]
+            "equip": b["equip"],
+            "color": normalize_balloon_color(b.get("color"))
         }
         # Include connector data if present
         if b.get("start_x") is not None:
@@ -1496,7 +1584,7 @@ def load_project_from_path(project_file, show_success_msg=True, prompt_for_pdf=T
     # Close existing document if open
     global doc, PDF_IN, num_pages, current_page_index, balloons, balloon_no
     global zoom, offset_x, offset_y, page_cache, pending_start, project_dirty
-    global project_headers, headers_dirty
+    global project_headers, headers_dirty, rotation
 
     if doc:
         doc.close()
@@ -1547,6 +1635,7 @@ def load_project_from_path(project_file, show_success_msg=True, prompt_for_pdf=T
             "neg": balloon_data["neg"],
             "pos": balloon_data["pos"],
             "equip": balloon_data["equip"],
+            "color": normalize_balloon_color(balloon_data.get("color")),
             "highlight": False,  # UI state not saved
             "start_x": balloon_data.get("start_x"),
             "start_y": balloon_data.get("start_y")
@@ -1562,6 +1651,15 @@ def load_project_from_path(project_file, show_success_msg=True, prompt_for_pdf=T
     offset_x = offset_y = 0
     page_cache.clear()
     pending_start = None
+    view_data = project_data.get("view", {})
+    if not isinstance(view_data, dict):
+        view_data = {}
+    loaded_rotation = view_data.get("rotation", 0)
+    try:
+        loaded_rotation = int(loaded_rotation) % 360
+    except Exception:
+        loaded_rotation = 0
+    rotation = loaded_rotation if loaded_rotation in (0, 90, 180, 270) else 0
     project_headers = normalize_headers(project_data.get("headers", {}))
 
     # Render the first page
@@ -1729,6 +1827,8 @@ tk.Button(toolbar, text="Open PDF", command=open_pdf).pack(side="left")
 tk.Button(toolbar, text="Open Project", command=load_project).pack(side="left", padx=(0,5))
 tk.Button(toolbar, text="Prev Page", command=prev_page).pack(side="left")
 tk.Button(toolbar, text="Next Page", command=next_page).pack(side="left", padx=(0,5))
+tk.Button(toolbar, text="Rotate Left", command=rotate_left).pack(side="left")
+tk.Button(toolbar, text="Rotate Right", command=rotate_right).pack(side="left", padx=(0,5))
 tk.Button(toolbar, text="Undo balloon", command=undo).pack(side="left", padx=(0,5))
 tk.Button(toolbar, text="Save PDF", command=save_pdf).pack(side="left")
 tk.Button(toolbar, text="Save Report", command=save_report).pack(side="left")
@@ -1747,7 +1847,7 @@ def render_two_point_preview():
     r = 9
     cx = w - padding - r
     cy = h // 2
-    outline = "red"
+    outline = normalize_balloon_color(selected_balloon_color)
     if two_point_mode:
         sx = padding + 4
         sy = cy
@@ -1760,6 +1860,28 @@ def render_two_point_preview():
         c.create_line(sx, sy, ex, ey, fill=outline, width=2)
         c.create_oval(sx-3, sy-3, sx+3, sy+3, outline=outline, fill=outline, width=1)
     c.create_oval(cx-r, cy-r, cx+r, cy+r, outline=outline, width=2)
+
+
+def update_color_swatch():
+    if "color_swatch" not in globals():
+        return
+    color_swatch.configure(bg=normalize_balloon_color(selected_balloon_color))
+
+
+def pick_balloon_color():
+    global selected_balloon_color
+    _, chosen_hex = colorchooser.askcolor(
+        color=normalize_balloon_color(selected_balloon_color),
+        title="Select Balloon Color"
+    )
+    if not chosen_hex:
+        return
+    selected_balloon_color = normalize_balloon_color(chosen_hex, selected_balloon_color)
+    update_color_swatch()
+    update_preview(balloon_radius_slider.get())
+    render_two_point_preview()
+    if doc:
+        render_overlays()
 
 #=======================================================
 # Keyboard Button Binds
@@ -1841,7 +1963,14 @@ preview_canvas.pack(side="right", padx=5)
 def update_preview(val):
     preview_canvas.delete("all")
     r = int(val) * zoom
-    preview_canvas.create_oval(25-r, 25-r, 25+r, 25+r, outline="red", width=2)
+    preview_canvas.create_oval(
+        25-r,
+        25-r,
+        25+r,
+        25+r,
+        outline=normalize_balloon_color(selected_balloon_color),
+        width=2
+    )
 
 balloon_radius_slider.config(command=update_preview)
 update_preview(balloon_radius_slider.get())
@@ -1852,6 +1981,12 @@ two_point_button.pack(side="right", padx=(8, 0))
 two_point_preview = tk.Canvas(toolbar, width=50, height=50, bg="#ababab", highlightthickness=0)
 two_point_preview.pack(side="right", padx=(6, 0))
 update_two_point_ui()
+
+color_pick_button = tk.Button(toolbar, text="Pick Color", command=pick_balloon_color)
+color_pick_button.pack(side="right", padx=(8, 0))
+color_swatch = tk.Canvas(toolbar, width=50, height=50, highlightthickness=0)
+color_swatch.pack(side="right", padx=(4, 0))
+update_color_swatch()
 
 # Splitter so the list can be resized by the user
 paned = tk.PanedWindow(root, orient="vertical")
