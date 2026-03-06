@@ -1309,28 +1309,34 @@ def save_report():
     for r in range(START_ROW, START_ROW + total_rows):
         copy_row_style(style_src_row, r, clear_values=False)
 
+    def write_num(cell, val):
+        cell.value = val
+
+        if isinstance(val, float) and val.is_integer():
+            cell.number_format = "0.0"
+        else:
+            cell.number_format = "General"
+
     # WRITE DATA (flows naturally)
     row = START_ROW
     for b in balloons:
         ws.cell(row=row, column=1).value = b["no"]
-        ws.cell(row=row, column=2).value = b["page"] + 1
+        _c2 = ws.cell(row=row, column=2)
+        write_num(_c2, b["page"] + 1)
         ws.cell(row=row, column=3).value = b["zone"]
         ws.cell(row=row, column=4).value = b['char']
         _c5 = ws.cell(row=row, column=5)
-        _c5.value = b["req"]
-        _c5.number_format = "General"
+        write_num(_c5, b["req"])
         _c6 = ws.cell(row=row, column=6)
-        _c6.value = b["pos"]
-        _c6.number_format = "General"
+        write_num(_c6, b["pos"])
         _c7 = ws.cell(row=row, column=7)
-        _c7.value = b["neg"]
-        _c7.number_format = "General"
+        write_num(_c7, b["neg"])
+        val8 = round(to_number_list_item(b['req']) - to_number_list_item(b['neg']), 2)
         _c8 = ws.cell(row=row, column=8)
-        _c8.value = round(to_number_list_item(b['req']) - to_number_list_item(b['neg']), 2)
-        _c8.number_format = "General"
+        write_num(_c8, val8)
+        val9 = round(to_number_list_item(b['req']) + to_number_list_item(b['pos']), 2)
         _c9 = ws.cell(row=row, column=9)
-        _c9.value = round(to_number_list_item(b['req']) + to_number_list_item(b['pos']), 2)
-        _c9.number_format = "General"
+        write_num(_c9, val9)
         ws.cell(row=row, column=10).value = b["equip"]
         row += 1
 
