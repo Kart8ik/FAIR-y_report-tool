@@ -800,6 +800,10 @@ def clear_pending_start():
 
 
 def toggle_two_point_mode():
+    if not doc:
+        messagebox.showwarning("No File", "No file to apply setting")
+        return
+
     global two_point_mode
     two_point_mode = not two_point_mode
     clear_pending_start()
@@ -1087,12 +1091,16 @@ def end_pan(event):
 # =====================================================
 
 def rotate_left():
+    if not doc:
+        return
     global rotation
     rotation = (rotation - 90) % 360
     clear_pending_start()
     render(force=True)
 
 def rotate_right():
+    if not doc:
+        return
     global rotation
     rotation = (rotation + 90) % 360
     clear_pending_start()
@@ -1144,8 +1152,9 @@ def show_shortcuts():
     shortcuts = [
         ("Ctrl + O", "Open PDF"),
         ("Ctrl + P", "Open Project (.fairy)"),
-        ("Ctrl + H", "Edit Headers"),
         ("Ctrl + Shift + P", "Save Project (.fairy)"),
+        ("Ctrl + H", "Open Headers"),
+        ("Shift + C", "Change Balloon Color"),
         ("Ctrl + S", "Save PDF"),
         ("Ctrl + Shift + S", "Save Report"),
         ("Escape", "Exit any Popup"),
@@ -1157,6 +1166,7 @@ def show_shortcuts():
         ("Delete", "Delete Selected balloon"),
         ("Shift + ↑ / ↓", "Change balloon Size"),
         ("← / →", "Prev / Next Page"),
+        ("Shift + ← / →", "Rotate Page"),
         ("↑ / ↓", "Prev / Next List Item"),
         ("Ctrl + + / -", "Zoom In / Out"),
         ("Ctrl + /", "Show Shortcuts"),
@@ -1449,7 +1459,8 @@ def save_project_to_path(project_file):
             "page_count": num_pages
         },
         "view": {
-            "rotation": rotation
+            "rotation": rotation,
+            "selected_balloon_color": normalize_balloon_color(selected_balloon_color)
         },
         "headers": normalize_headers(project_headers),
         "balloons": []
@@ -1584,7 +1595,7 @@ def load_project_from_path(project_file, show_success_msg=True, prompt_for_pdf=T
     # Close existing document if open
     global doc, PDF_IN, num_pages, current_page_index, balloons, balloon_no
     global zoom, offset_x, offset_y, page_cache, pending_start, project_dirty
-    global project_headers, headers_dirty, rotation
+    global project_headers, headers_dirty, rotation, selected_balloon_color
 
     if doc:
         doc.close()
@@ -1660,7 +1671,15 @@ def load_project_from_path(project_file, show_success_msg=True, prompt_for_pdf=T
     except Exception:
         loaded_rotation = 0
     rotation = loaded_rotation if loaded_rotation in (0, 90, 180, 270) else 0
+    selected_balloon_color = normalize_balloon_color(
+        view_data.get("selected_balloon_color", selected_balloon_color),
+        selected_balloon_color,
+    )
     project_headers = normalize_headers(project_data.get("headers", {}))
+
+    # Sync color controls with restored project setting.
+    update_color_swatch()
+    update_preview(balloon_radius_slider.get())
 
     # Render the first page
     render(force=True)
@@ -1892,6 +1911,8 @@ root.bind("<Control-P>", lambda e: load_project())
 root.bind("<Control-p>", lambda e: load_project())
 root.bind("<Control-H>", lambda e: headers_popup())
 root.bind("<Control-h>", lambda e: headers_popup())
+root.bind("<Shift-C>", lambda e: pick_balloon_color())
+root.bind("<Shift-c>", lambda e: pick_balloon_color())
 root.bind("<Control-Shift-P>", lambda e: save_project())
 root.bind("<Control-Shift-p>", lambda e: save_project())
 root.bind("<Control-S>", lambda e: save_pdf())
@@ -1907,6 +1928,8 @@ root.bind("<Control-KP_Add>", zoom_in_key)
 root.bind("<Control-equal>", zoom_in_key)  # Ctrl+= for + on many keyboards
 root.bind("<Control-minus>", zoom_out_key)
 root.bind("<Control-KP_Subtract>", zoom_out_key)
+root.bind("<Shift-Left>",lambda e:  rotate_left())
+root.bind("<Shift-Right>",lambda e: rotate_right())
 root.bind("<Shift-Up>", radius_increase)
 root.bind("<Shift-Down>", radius_decrease)
 root.bind("<Control-Q>", lambda e: on_app_close())
@@ -1982,7 +2005,7 @@ two_point_preview = tk.Canvas(toolbar, width=50, height=50, bg="#ababab", highli
 two_point_preview.pack(side="right", padx=(6, 0))
 update_two_point_ui()
 
-color_pick_button = tk.Button(toolbar, text="Pick Color", command=pick_balloon_color)
+color_pick_button = tk.Button(toolbar, text="Pick Balloon Color",width=16, command=pick_balloon_color)
 color_pick_button.pack(side="right", padx=(8, 0))
 color_swatch = tk.Canvas(toolbar, width=50, height=50, highlightthickness=0)
 color_swatch.pack(side="right", padx=(4, 0))

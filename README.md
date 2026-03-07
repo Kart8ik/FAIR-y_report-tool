@@ -1,238 +1,183 @@
 ## FAIR-y
 
-Professional desktop tool for placing numbered balloons on PDF engineering drawings, capturing dimensional inspection data (characteristic/requirement/tolerance/equipment), and generating FAIR (First Article Inspection Report) documentation with full project management capabilities.
+Professional desktop tool for placing numbered balloons on PDF engineering drawings, capturing dimensional inspection data, and generating FAIR documentation.
+
+This repo has two company-specific variants of the same app:
+- `test.py`: Company A workflow using `FORMAT.xlsx`
+- `test2.py`: Company B (WORBYN) workflow using `FORMAT_WORBYN_2.xlsx`
+
+Both variants share the same UI patterns, project file format (`.fairy`), and annotation workflow.
 
 ### Core Features
 
-#### PDF Annotation
-- Load multi-page engineering drawings with smooth cached rendering
-- Place numbered balloons via right-click with immediate visual feedback
-- Two-point mode: draw connector lines from detail to balloon
-- Pan (left-click drag) and zoom (mouse wheel) with real-time preview
-- Undo last balloon on current page (Ctrl+Z)
-- Navigate pages with arrow keys or toolbar buttons
+#### PDF Annotation and Review
+- Open and render multi-page PDFs with page caching for smooth navigation
+- Add numbered balloons with right-click
+- Two-point mode: place a start point and balloon end point with connector line
+- Pan with left-click drag
+- Zoom with mouse wheel, keyboard, or zoom slider
+- Rotate page view left/right from toolbar or keyboard
+- Undo last balloon on current page (`Ctrl+Z`)
 
-#### Data Entry
-- Rich dropdown lists for characteristic designators and equipment types
-- Capture: Characteristic, Requirement, -Tolerance, +Tolerance, Equipment
-- Smart placeholder system: remembers your last entries across balloons
-- Gray placeholders auto-fill, press Tab to accept or type to replace
-- Speeds up repetitive data entry significantly
+#### Balloon Metadata Entry
+- Per-balloon fields: Zone, Characteristic, Requirement, `-Tol`, `+Tol`, Equipment
+- Characteristic and Equipment dropdown catalogs
+- Placeholder memory for repeated entries (fast data entry)
+- Inline edit/delete from list view (double click, Enter, Delete)
+- Temporary highlight when editing selected balloon
 
-#### Project Management (NEW)
-- **Save/Load Projects**: Work saved as `.fairy` files (JSON format)
-- **Session Persistence**: Automatically reopens your last saved project on startup
-- **Smart Close Dialog**: Warns about unsaved changes with 3 options:
-  - Save (silent if path exists, Save As if new)
-  - Don't Save
-  - Cancel
-- **Dirty State Tracking**: Only warns when actual project data changes (not PDF/Report exports)
-- **Missing PDF Recovery**: If project's PDF is moved, prompts to locate it
+#### Color Features (New)
+- `Pick Balloon Color` toolbar action
+- Color swatch preview in toolbar
+- Balloon preview updates with current zoom and selected color
+- Balloon color stored per balloon
+- Selected default balloon color restored when loading a project
+
+#### Header Management
+- Dedicated Headers popup for report metadata
+- Header values stored inside `.fairy` project files
+- Missing header confirmation before report export
+- `Ctrl+H` shortcut to open headers quickly
+
+#### Project Management
+- Save and load projects as `.fairy` JSON
+- Auto-restore last project on startup (AppData state file)
+- Dirty state tracking with unsaved-change close prompt
+- Save current project silently when path already exists
+- Relink PDF if original path is missing during project load
 
 #### Export Options
-- **Bubbled PDF**: Original drawing with overlaid balloons and connectors
-- **FAIR Report**: Auto-generated Excel using `FORMAT.xlsx` template
-  - Dynamically inserts rows for any number of balloons
-  - Preserves template styling, merges, and row heights
-  - Fills columns: Page, Balloon #, Characteristic, Req, -Tol, +Tol, Equipment
-- **Project Files**: Save work-in-progress as `.fairy` for later
+- Ballooned PDF export (includes circles, numbers, connectors, and colors)
+- Excel FAIR report export with dynamic row insertion and style preservation
+- Automatic tolerance-derived lower/upper values in list/report
 
-### Controls & Shortcuts
+### Controls and Shortcuts
 
-#### Toolbar Buttons
-- **Open PDF** - Load a new drawing (clears project)
-- **Open Project** - Resume saved work from `.fairy` file
-- **Prev/Next Page** - Navigate multi-page drawings
-- **Undo** - Remove last balloon on current page
-- **Save PDF** - Export bubbled drawing
-- **Save Report** - Generate FAIR Excel report
-- **Save Project** - Save current work as `.fairy` file
-- **Help** - Show keyboard shortcuts
+#### Mouse
+- Right-click: add balloon (or start/end in two-point mode)
+- Left-click drag: pan canvas
+- Mouse wheel: zoom centered on cursor
+- Double-click list row: edit balloon
 
-#### Mouse Controls
-- **Right-click**: Place balloon (or start/end connector in two-point mode)
-- **Left-click + drag**: Pan the canvas
-- **Mouse wheel**: Zoom in/out centered on cursor
-- **Double-click** (in list): Edit balloon data
-- **Ctrl+T**: Toggle two-point mode (balloon with/without line)
+#### Keyboard
+- `Ctrl+O`: Open PDF
+- `Ctrl+P`: Open Project
+- `Ctrl+Shift+P`: Save Project
+- `Ctrl+S`: Save PDF
+- `Ctrl+Shift+S`: Save Report
+- `Ctrl+H`: Open Headers
+- `Shift+C`: Pick Balloon Color
+- `Ctrl+T`: Toggle two-point mode
+- `Ctrl+Z`: Undo last balloon on current page
+- `Shift+Left` / `Shift+Right`: Rotate page view
+- `Ctrl+=` / `Ctrl++`: Zoom in
+- `Ctrl+-`: Zoom out
+- `Shift+Up` / `Shift+Down`: Increase/decrease balloon size
+- `Enter`: Edit selected balloon in list
+- `Delete`: Delete selected balloon in list
+- `Ctrl+/`: Show shortcuts window
+- `Ctrl+Q`: Close app (with unsaved-changes flow)
+- `Esc`: Close active popup
 
-#### Keyboard Shortcuts
-**File Operations:**
-- `Ctrl+O` - Open PDF
-- `Ctrl+P` - Open Project (.fairy)
-- `Ctrl+Shift+P` - Save Project (.fairy)
-- `Ctrl+S` - Save PDF
-- `Ctrl+Shift+S` - Save Report
-- `Ctrl+Q` - Exit (with unsaved changes warning)
+### `.fairy` Project Format
 
-**Editing:**
-- `Ctrl+Z` - Undo last balloon
-- `Enter` - Edit selected balloon
-- `Delete` - Delete selected balloon
+Projects are JSON with versioned structure. Key sections include:
+- `pdf`: source path and page count
+- `view`: rotation and selected default balloon color
+- `headers`: report metadata for active variant
+- `balloons`: geometry, annotation values, optional connector points, color
 
-**Navigation:**
-- `←/→` - Previous/Next page
-- `↑/↓` - Move selection in balloon list (auto-highlights)
-
-**View:**
-- `Ctrl+=/+` - Zoom in
-- `Ctrl+-` - Zoom out
-- `Shift+↑/↓` - Increase/Decrease balloon size
-
-**Other:**
-- `Ctrl+/` - Show keyboard shortcuts
-- `Escape` - Close any popup
-
-### Data Flow
-
-1. **Open PDF** → Starts fresh session, clears all state
-2. **Open Project** → Loads PDF + balloon data, restores session
-3. **Right-click** → Places balloon → Opens data entry popup → Saves or discards
-4. **Save Project** → Stores balloon data + PDF reference as `.fairy` JSON
-5. **Save PDF** → Renders balloons onto PDF copy
-6. **Save Report** → Generates Excel from template with all balloon data
-7. **Close App** → Saves session state, warns if unsaved changes
-
-### Project File Format
-
-Projects are saved as human-readable JSON (`.fairy` extension):
+Example:
 
 ```json
 {
   "version": 1,
   "pdf": {
-    "path": "C:/Engineering/Bracket_Rev3.pdf",
-    "page_count": 3
+    "path": "C:/path/sample.pdf",
+    "page_count": 2
+  },
+  "view": {
+    "rotation": 0,
+    "selected_balloon_color": "#0095ff"
+  },
+  "headers": {
+    "part_number": "PN-001"
   },
   "balloons": [
     {
       "page": 0,
       "no": 1,
-      "x": 152.34,
-      "y": 420.91,
+      "x": 305.33,
+      "y": 156.66,
       "r": 6,
+      "zone": "A1",
       "char": "Length",
-      "req": 120.0,
+      "req": 120,
       "neg": 0.1,
       "pos": 0.2,
       "equip": "Digital vernier caliper",
-      "start_x": 100.0,
-      "start_y": 200.0
+      "color": "#ff0000",
+      "start_x": 280.1,
+      "start_y": 190.4
     }
   ]
 }
 ```
 
-**Benefits:**
-- Readable and debuggable
-- Version control friendly (Git diff works)
-- No vendor lock-in
-- Won't corrupt your PDF files
-- Easy to migrate/script if needed
-
-### Session Persistence
-
-The app automatically remembers your last saved project:
-- State stored in: `%APPDATA%\FAIR-y\state.json`
-- On startup: attempts to reopen last project
-- If PDF is missing: shows notification and starts fresh
-- If project is deleted: silently starts fresh
-- Crash-resistant: state saved immediately after every save
-
 ### Requirements
 
-**Python Dependencies:**
+Install dependencies:
+
 ```bash
 pip install pymupdf pillow openpyxl
 ```
-- `pymupdf` (fitz) - PDF rendering and manipulation
-- `tkinter` - GUI framework (usually included with Python)
-- `Pillow` - Image processing
-- `openpyxl` - Excel file generation
 
-**Template Files:**
-- `FORMAT.xlsx` - FAIR report template (required for Excel export)
-- `app-icon.ico` - Application icon (optional)
+Notes:
+- `tkinter` is required and usually bundled with standard Python distributions.
+- Keep the correct template file for the variant you run.
 
-### Running
+### Run
 
-**Development:**
+Company A:
+
 ```bash
 python test.py
 ```
 
-**PyInstaller Build:**
+Company B (WORBYN):
+
+```bash
+python test2.py
+```
+
+### Build (PyInstaller)
+
+Example build for `test.py`:
+
 ```bash
 pyinstaller --onefile --windowed ^
   --add-data "FORMAT.xlsx;." ^
+  --add-data "FORMAT_WORBYN_2.xlsx;." ^
   --add-data "app-icon.ico;." ^
   --icon=app-icon.ico ^
   --name FAIR-y ^
   test.py
 ```
 
-The `resource_path()` function handles both development and bundled execution.
+For `test2.py`, keep the same options and replace the entry script with `test2.py`.
 
-### Technical Notes
+### Session Persistence
 
-#### State Management
-- **Project state**: Balloon positions, data, PDF reference
-- **Session state**: Last opened project path (auto-restore)
-- **UI state**: Zoom, pan, selection (not saved - resets on load)
-- **Dirty flag**: Tracks unsaved changes to prevent data loss
+App state path:
+- `%APPDATA%\FAIR-y\state.json`
 
-#### Smart Placeholders
-- Remembers last 5 values: char, req, neg, pos, equip
-- Shows as gray text in new balloon popups
-- Tab accepts placeholder, any key replaces it
-- Cache persists for entire session
-- Empty fields don't overwrite cache
+Behavior:
+- Last saved project path is tracked
+- App tries to restore that project at startup
+- If the project/PDF is missing, app starts fresh safely
 
-#### PDF Coordinate System
-- Balloons stored in PDF coordinate space (not screen pixels)
-- Survives zoom/pan operations
-- Connector lines computed relative to balloon radius
-- Proper rendering at any zoom level
+### Notes
 
-#### Export Logic
-- **PDF**: PyMuPDF draws circles + text + lines onto page copy
-- **Excel**: Dynamic row insertion before footer block, style preservation
-- **Project**: JSON serialization with version field for future migration
-
-#### Error Handling
-- Corrupt `.fairy` files → error dialog, safe abort
-- Missing PDF on load → locate dialog or cancel
-- Invalid balloon data → skipped with warning
-- Page count mismatch → warning, continues anyway
-- Silent failures for non-critical state saves
-
-### Architecture
-
-- **Single-file application**: `test.py` (~1600 lines)
-- **No database**: All data in memory + `.fairy` files
-- **Cross-platform**: Works on Windows, macOS, Linux
-- **Stateless exports**: PDF and Excel generation are pure functions
-- **Clean separation**: UI ↔ Business Logic ↔ File I/O
-
-### Use Cases
-
-1. **Manufacturing QA**: First article inspection documentation
-2. **Engineering**: Dimensional verification of prototypes
-3. **Supplier Audit**: Part qualification and certification
-4. **Continuous Work**: Save mid-inspection, resume later
-5. **Collaboration**: Share `.fairy` files with team (just ensure PDF access)
-
-### Future Enhancements
-
-The `.fairy` JSON format enables:
-- Autosave (periodic background saves)
-- Version diffing (Git integration)
-- Cloud sync (Dropbox, OneDrive)
-- Multi-user workflows (merge conflicts)
-- Audit trails (change history)
-- Batch processing (scripted reports)
-
----
-
-**Made with Python + Tkinter**  
-No databases, no servers, no subscriptions. Just a solid desktop tool that does one thing well.
+- Rotation and selected balloon color are now part of saved/restored project view state.
+- Guard checks prevent rotate/two-point actions before any PDF is opened.
+- Excel export logic differs between `test.py` and `test2.py` only in template layout and header mapping.
