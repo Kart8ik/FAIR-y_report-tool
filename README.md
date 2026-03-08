@@ -2,6 +2,8 @@
 
 Professional desktop tool for placing numbered balloons on PDF engineering drawings, capturing dimensional inspection data, and generating FAIR documentation.
 
+![FAIR-y Application](image.png)
+
 This repo has two company-specific variants of the same app:
 - `test.py`: Company A workflow using `FORMAT.xlsx`
 - `test2.py`: Company B (WORBYN) workflow using `FORMAT_WORBYN_2.xlsx`

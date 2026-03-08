@@ -1104,16 +1104,18 @@ def end_pan(event):
 def rotate_left():
     if not doc:
         return
-    global rotation
+    global rotation, project_dirty
     rotation = (rotation - 90) % 360
+    project_dirty = True
     clear_pending_start()
     render(force=True)
 
 def rotate_right():
     if not doc:
         return
-    global rotation
+    global rotation, project_dirty
     rotation = (rotation + 90) % 360
+    project_dirty = True
     clear_pending_start()
     render(force=True)
 
@@ -1611,7 +1613,7 @@ def load_project_from_path(project_file, show_success_msg=True, prompt_for_pdf=T
     # Close existing document if open
     global doc, PDF_IN, num_pages, current_page_index, balloons, balloon_no
     global zoom, offset_x, offset_y, page_cache, pending_start, project_dirty
-    global project_headers, headers_dirty, rotation, selected_balloon_color
+    global project_headers, headers_dirty, rotation, selected_balloon_color, current_project_path
 
     if doc:
         doc.close()
@@ -1700,6 +1702,9 @@ def load_project_from_path(project_file, show_success_msg=True, prompt_for_pdf=T
     # Render the first page
     render(force=True)
     update_two_point_ui()
+
+    # Remember loaded project path so Save can overwrite existing projects.
+    current_project_path = project_file
     
     # Mark project as clean after successful load
     project_dirty = False
@@ -1846,7 +1851,10 @@ try:
 except Exception:
     root.attributes("-zoomed", True)  # fallback
 root.title("FAIR-y")
-root.iconbitmap(resource_path("app-icon.ico"))
+try:
+    root.iconbitmap(resource_path("app-icon.ico"))
+except Exception:
+    pass
 
 root.protocol("WM_DELETE_WINDOW", on_app_close)
 
@@ -1902,14 +1910,18 @@ def update_color_swatch():
 
 
 def pick_balloon_color():
-    global selected_balloon_color
+    global selected_balloon_color, project_dirty
     _, chosen_hex = colorchooser.askcolor(
         color=normalize_balloon_color(selected_balloon_color),
         title="Select Balloon Color"
     )
     if not chosen_hex:
         return
-    selected_balloon_color = normalize_balloon_color(chosen_hex, selected_balloon_color)
+    new_color = normalize_balloon_color(chosen_hex, selected_balloon_color)
+    if new_color == selected_balloon_color:
+        return
+    selected_balloon_color = new_color
+    project_dirty = True
     update_color_swatch()
     update_preview(balloon_radius_slider.get())
     render_two_point_preview()

@@ -57,7 +57,7 @@ OUTPUT_DIR = os.path.join(
 )
 
 # Number of bubbles to add
-BUBBLE_COUNT = 108
+BUBBLE_COUNT = 10
 
 # Loop entire test this many times (1 = single run)
 ITERATIONS = 1
@@ -80,10 +80,14 @@ ADD_BUBBLES_TIMEOUT = 800  # ~80 bubbles * ~1.5s each
 # Field options for bubble popup (inspired by test.py); 5 options each for variety
 ZONE_OPTIONS = ["A1", "A2", "B1", "B2", "C1"]
 CHAR_OPTIONS = ["Length", "Width", "Diameter", "Slot length", "Flatness"]
-REQ_OPTIONS = ["10", "25.5", "0.5", "100", "1.25"]
+REQ_OPTIONS = ["10","18.0", "25.5", "0.5", "100", "1.25"]
 NEG_OPTIONS = ["0.1", "0.05", "0.2", "0.01", "0.5"]
 POS_OPTIONS = ["0.1", "0.05", "0.2", "0.01", "0.5"]
 EQUIP_OPTIONS = ["Vernier caliper", "Digital vernier caliper", "Digital micrometer", "Pin gauge", "CMM"]
+
+# Feature cadence controls
+ROTATE_EVERY_N_BALLOONS = 3
+PICK_COLOR_EVERY_N_BALLOONS = 3
 
 # =============================================================================
 # HELPERS
@@ -218,6 +222,43 @@ def get_canvas_region() -> tuple[int, int, int, int]:
     return canvas_left, canvas_top, canvas_right, canvas_bottom
 
 
+def pick_random_balloon_color() -> None:
+    """
+    Open balloon color picker (Shift+C), move to a random palette swatch,
+    and confirm with Enter.
+    """
+    pyautogui.hotkey("shift", "c")
+    time.sleep(0.8)
+
+    # Random walk in the default palette area to vary selected color.
+    steps = random.randint(8, 30)
+    arrows = ["left", "right", "up", "down"]
+    for _ in range(steps):
+        pyautogui.press(random.choice(arrows))
+        time.sleep(0.02)
+
+
+    pyautogui.press("space")
+    time.sleep(0.1)
+    pyautogui.press("enter")
+    time.sleep(0.35)
+
+
+def rotate_view(direction: str) -> None:
+    if direction == "left":
+        key = "left"
+    else:
+        key = "right"
+
+    pyautogui.keyDown("shift")
+    time.sleep(0.05)
+    pyautogui.press(key)
+    time.sleep(0.05)
+    pyautogui.keyUp("shift")
+
+    time.sleep(0.35)
+
+
 # =============================================================================
 # PHASE 1: LAUNCH APP
 # =============================================================================
@@ -338,7 +379,7 @@ def add_bubbles() -> None:
     pad_y = (y_max - y_min) // 6
     cx_min, cx_max = x_min + pad_x, x_max - pad_x
     cy_min, cy_max = y_min + pad_y, y_max - pad_y
-    rev = 0
+    rotation_direction = "left"
     start = time.time()
     for i in range(BUBBLE_COUNT):
         if time.time() - start > ADD_BUBBLES_TIMEOUT:
@@ -367,16 +408,17 @@ def add_bubbles() -> None:
             pyautogui.press("enter")
             time.sleep(0.3 if j == len(fields) - 1 else 0.05)
 
-        if (i + 1) % 5 == 0:
-            if rev == 0 :
-                pyautogui.press("left")
-                rev = 1
-                time.sleep(0.3)
-            elif rev == 1 :
-                pyautogui.press("right")
-                rev = 0
-                time.sleep(0.3)
-            log(f"  Added {i + 1}/{BUBBLE_COUNT} bubbles")
+        bubble_no = i + 1
+
+        if bubble_no % ROTATE_EVERY_N_BALLOONS == 0:
+            rotate_view(rotation_direction)
+            rotation_direction = "right" if rotation_direction == "left" else "left"
+
+        if bubble_no % PICK_COLOR_EVERY_N_BALLOONS == 0:
+            pick_random_balloon_color()
+
+        if bubble_no % 5 == 0:
+            log(f"  Added {bubble_no}/{BUBBLE_COUNT} bubbles")
 
     log(f"Phase 4 complete: {BUBBLE_COUNT} bubbles added")
     time.sleep(PAUSE_SEC)
