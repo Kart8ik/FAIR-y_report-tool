@@ -1,6 +1,6 @@
 ## FAIR-y
 
-Professional desktop tool for placing numbered balloons on PDF engineering drawings, capturing dimensional inspection data, and generating FAIR documentation.
+Professional desktop tool for placing numbered balloons on PDF engineering drawings, capturing dimensional inspection data (characteristic/requirement/tolerance/equipment), and generating FAIR (First Article Inspection Report) documentation with full project management capabilities.
 
 ![FAIR-y Application](image.png)
 
