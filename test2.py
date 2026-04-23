@@ -144,24 +144,28 @@ def normalize_headers(headers):
 project_headers = default_headers()
 
 
-def rotate_coords(x, y, w, h):
-    if rotation == 90:
+def rotate_coords(x, y, w, h, rot):
+    if rot == 90:
         return h - y, x
-    if rotation == 180:
+    if rot == 180:
         return w - x, h - y
-    if rotation == 270:
+    if rot == 270:
         return y, w - x
     return x, y
 
 
-def inverse_rotate_coords(x, y, w, h):
-    if rotation == 90:
+def inverse_rotate_coords(x, y, w, h, rot):
+    if rot == 90:
         return y, h - x
-    if rotation == 180:
+    if rot == 180:
         return w - x, h - y
-    if rotation == 270:
+    if rot == 270:
         return w - y, x
     return x, y
+
+
+def get_effective_rotation(page):
+    return (page.rotation + rotation) % 360
 
 # =====================================================
 # RENDER PDF
@@ -191,13 +195,15 @@ def render_pdf():
 def render_overlays():
     canvas.delete("overlay")
     page = doc[current_page_index]
-    w = page.rect.width
-    h = page.rect.height
+    media = page.mediabox
+    w = media.width
+    h = media.height
+    effective_rotation = get_effective_rotation(page)
 
     # Pending start marker for two-point mode
     if pending_start and pending_start["page"] == current_page_index:
         marker_color = normalize_balloon_color(selected_balloon_color)
-        sx, sy = rotate_coords(pending_start["x"], pending_start["y"], w, h)
+        sx, sy = rotate_coords(pending_start["x"], pending_start["y"], w, h, effective_rotation)
         sx = sx * zoom + offset_x
         sy = sy * zoom + offset_y
         marker_r = max(3, (balloon_radius_slider.get() * zoom) / 10)
@@ -213,7 +219,7 @@ def render_overlays():
         if b["page"] != current_page_index:
             continue
 
-        x, y = rotate_coords(b["x"], b["y"], w, h)
+        x, y = rotate_coords(b["x"], b["y"], w, h, effective_rotation)
         x = x * zoom + offset_x
         y = y * zoom + offset_y
         r = b["r"] * zoom
@@ -221,7 +227,7 @@ def render_overlays():
 
         # Draw connector if this balloon was placed via two-point mode
         if b.get("start_x") is not None and b.get("start_y") is not None:
-            sx, sy = rotate_coords(b["start_x"], b["start_y"], w, h)
+            sx, sy = rotate_coords(b["start_x"], b["start_y"], w, h, effective_rotation)
             sx = sx * zoom + offset_x
             sy = sy * zoom + offset_y
             line_width = max(2, r / 10)
@@ -820,7 +826,9 @@ def add_balloon(event):
     display_x = (event.x - offset_x) / zoom
     display_y = (event.y - offset_y) / zoom
     page = doc[current_page_index]
-    pdf_x, pdf_y = inverse_rotate_coords(display_x, display_y, page.rect.width, page.rect.height)
+    effective_rotation = get_effective_rotation(page)
+    page_media = page.mediabox
+    pdf_x, pdf_y = inverse_rotate_coords(display_x, display_y, page_media.width, page_media.height, effective_rotation)
 
     # Two-click flow
     if two_point_mode:
@@ -1249,52 +1257,64 @@ def save_pdf():
     if not PDF_OUT:
         return
 
-    export_rotation = (360 - rotation) % 360
-
     out = fitz.open()
     for i in range(num_pages):
         src_page = doc[i]
-        src_w = src_page.rect.width
-        src_h = src_page.rect.height
-        out_w, out_h = (src_h, src_w) if export_rotation in (90, 270) else (src_w, src_h)
-        p = out.new_page(width=out_w, height=out_h)
-        p.show_pdf_page(p.rect, doc, i, rotate=export_rotation)
+        effective_rotation = get_effective_rotation(src_page)
+
+        # Copy the source page exactly — content, fonts, resources, and stored
+        # page.rotation all transfer intact. No coordinate transformation needed.
+        out.insert_pdf(doc, from_page=i, to_page=i)
+        p = out[i]
+
+        # Apply any additional user rotation on top of the page's stored rotation.
+        if rotation != 0:
+            p.set_rotation(effective_rotation % 360)
+
         for b in balloons:
-            if b["page"] == i:
-                x, y = rotate_coords(b["x"], b["y"], src_w, src_h)
-                r = b["r"]
-                balloon_rgb = hex_to_fitz_rgb(b.get("color"))
-                # Draw connector if present (project to balloon edge)
-                if b.get("start_x") is not None and b.get("start_y") is not None:
-                    sx, sy = rotate_coords(b["start_x"], b["start_y"], src_w, src_h)
-                    dx = x - sx
-                    dy = y - sy
-                    dist = (dx * dx + dy * dy) ** 0.5
-                    if dist < 1e-6:
-                        ex, ey = x, y
-                    else:
-                        scale = r / dist
-                        ex = x - dx * scale
-                        ey = y - dy * scale
-                    p.draw_line(fitz.Point(sx, sy), fitz.Point(ex, ey), color=balloon_rgb, width=r/10)
-                    handle_r = r/10
-                    p.draw_oval(
-                        fitz.Rect(sx - handle_r, sy - handle_r, sx + handle_r, sy + handle_r),
-                        color=balloon_rgb,
-                        fill=balloon_rgb,
-                        width=1
-                    )
-                p.draw_oval(fitz.Rect(x-r, y-r, x+r, y+r), color=balloon_rgb, width=r/10)
-                text = str(b["no"])
-                font_size = r
-                try:
-                    text_width = fitz.get_text_length(text, fontsize=font_size)
-                except Exception:
-                    text_width = font_size * 0.6 * len(text)  # fallback estimate
-                # center horizontally; adjust baseline to visually center vertically
-                tx = x - text_width / 2
-                ty = y + font_size * 0.35
-                p.insert_text(fitz.Point(tx, ty), text, fontsize=font_size, color=balloon_rgb)
+            if b["page"] != i:
+                continue
+
+            # Balloon coords are stored in raw mediabox space (unrotated) by
+            # add_balloon's inverse_rotate_coords. PyMuPDF's drawing API on an
+            # inserted page also uses raw mediabox coordinates — /Rotate is
+            # ignored for drawing. The /Rotate stored on the page handles the
+            # visual orientation, so draw directly at raw coords: no transform.
+            x, y = b["x"], b["y"]
+            r = b["r"]
+            balloon_rgb = hex_to_fitz_rgb(b.get("color"))
+
+            # Draw connector line if this was a two-point balloon.
+            if b.get("start_x") is not None and b.get("start_y") is not None:
+                sx, sy = b["start_x"], b["start_y"]
+                dx = x - sx
+                dy = y - sy
+                dist = (dx * dx + dy * dy) ** 0.5
+                if dist < 1e-6:
+                    ex, ey = x, y
+                else:
+                    scale = r / dist
+                    ex = x - dx * scale
+                    ey = y - dy * scale
+                p.draw_line(fitz.Point(sx, sy), fitz.Point(ex, ey), color=balloon_rgb, width=r / 10)
+                handle_r = r / 10
+                p.draw_oval(
+                    fitz.Rect(sx - handle_r, sy - handle_r, sx + handle_r, sy + handle_r),
+                    color=balloon_rgb,
+                    fill=balloon_rgb,
+                    width=1,
+                )
+
+            p.draw_oval(fitz.Rect(x - r, y - r, x + r, y + r), color=balloon_rgb, width=r / 10)
+            text = str(b["no"])
+            font_size = r
+            try:
+                text_width = fitz.get_text_length(text, fontsize=font_size)
+            except Exception:
+                text_width = font_size * 0.6 * len(text)
+            tx = x - text_width / 2
+            ty = y + font_size * 0.35
+            p.insert_text(fitz.Point(tx, ty), text, fontsize=font_size, color=balloon_rgb)
     out.save(PDF_OUT)
     out.close()
     messagebox.showinfo("Saved", f"Ballooned drawing saved as {PDF_OUT}")
