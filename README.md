@@ -1,6 +1,6 @@
 ## FAIR-y
 
-Professional desktop tool for placing numbered balloons on PDF engineering drawings, capturing dimensional inspection data (characteristic/requirement/tolerance/equipment), and generating FAIR (First Article Inspection Report) documentation with full project management capabilities.
+Desktop application for annotating engineering drawings with indexed inspection callouts, capturing dimensional data (characteristic, requirement, tolerances, equipment), and generating structured First Article Inspection Reports (FAIR) with project persistence and export workflows.
 
 ![FAIR-y Application](image.png)
 
@@ -157,13 +157,7 @@ python test2.py
 Example build for `test.py`:
 
 ```bash
-pyinstaller --onefile --windowed ^
-  --add-data "FORMAT.xlsx;." ^
-  --add-data "FORMAT_WORBYN_2.xlsx;." ^
-  --add-data "app-icon.ico;." ^
-  --icon=app-icon.ico ^
-  --name FAIR-y ^
-  test.py
+pyinstaller --onefile --windowed --add-data "FORMAT.xlsx;." --add-data "FORMAT_WORBYN_2.xlsx;." --add-data "app-icon.ico;." --icon=app-icon.ico --name FAIR-y test.py
 ```
 
 For `test2.py`, keep the same options and replace the entry script with `test2.py`.

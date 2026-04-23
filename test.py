@@ -304,10 +304,10 @@ def open_pdf():
     doc = fitz.open(PDF_IN)
     page = doc[0]
 
-    print("Rotation:", page.rotation)
-    print("Rect:", page.rect)
-    print("CropBox:", page.cropbox)
-    print("MediaBox:", page.mediabox)
+    # print("Rotation:", page.rotation)
+    # print("Rect:", page.rect)
+    # print("CropBox:", page.cropbox)
+    # print("MediaBox:", page.mediabox)
     num_pages = len(doc)
     current_page_index = 0
     balloons.clear()
@@ -1297,7 +1297,7 @@ def save_pdf():
         if rotation != 0:
             p.set_rotation(effective_rotation % 360)
 
-        print(f"PAGE {i}: stored={src_page.rotation}° user={rotation}° effective={effective_rotation}°  page rect after rotation: {p.rect}")
+        # print(f"PAGE {i}: stored={src_page.rotation}° user={rotation}° effective={effective_rotation}°  page rect after rotation: {p.rect}")
 
         for b in balloons:
             if b["page"] != i:

@@ -4,6 +4,7 @@ dist/
 __pycache__/
 *.py[cod]
 *.spec
+.venv/
 
 test-v1.py
 test-v2.py  
